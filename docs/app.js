@@ -335,6 +335,31 @@ route();
 
 // ---- Offline support ----
 if ('serviceWorker' in navigator) {
+  // New content arrived in the background: drop the in-memory catalogue and
+  // redraw list pages. Lesson pages are left alone so a reader isn't moved.
+  const refreshView = () => {
+    catalogue = null;
+    if (!parseRoute().lesson) route();
+  };
+  navigator.serviceWorker.addEventListener('message', (e) => {
+    if (e.data?.type === 'content-updated') refreshView();
+  });
+  // A new app version took over (e.g. after a cache bump).
+  let hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hadController) refreshView();
+    hadController = true;
+  });
+  // Home-screen apps often resume from memory without reloading, so check for
+  // new content whenever the app comes back to the foreground.
+  let lastCheck = Date.now();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || Date.now() - lastCheck < 30_000) return;
+    lastCheck = Date.now();
+    fetch('content/index.json').catch(() => {});
+    navigator.serviceWorker.getRegistration().then((r) => r?.update()).catch(() => {});
+  });
+
   navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).then(() => {
     foot.textContent = 'Saved for offline use.';
   }).catch(() => {

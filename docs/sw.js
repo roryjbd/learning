@@ -3,7 +3,7 @@
 // cache straight away and refreshed in the background when there's signal
 // (stale-while-revalidate), so new lessons appear on the next open.
 
-const CACHE = 'study-v1';
+const CACHE = 'study-v2';
 const SHELL = [
   './',
   'index.html',
@@ -50,17 +50,25 @@ self.addEventListener('fetch', (event) => {
     // All routes are hash-based, so any page navigation is the app shell.
     const key = req.mode === 'navigate' ? 'index.html' : req;
     const cached = await cache.match(key, { ignoreSearch: true });
+    const isCatalogue = req.url.endsWith('content/index.json');
+    // Read the old catalogue now: once `cached` is returned its body is used up.
+    const before = isCatalogue && cached ? cached.clone().text() : null;
 
     // no-cache: revalidate with the server rather than reuse the HTTP cache.
     const refresh = fetch(req.url, { cache: 'no-cache' }).then(async (res) => {
       if (res.ok) {
+        const after = isCatalogue ? res.clone().text() : null;
         await cache.put(key, res.clone());
-        // A changed catalogue may list new lessons: fetch them too.
-        if (req.url.endsWith('content/index.json')) {
+        // A changed catalogue means new or edited lessons: refresh them all,
+        // then tell open pages so they can re-render without a reload.
+        if (before && (await before) !== (await after)) {
           const urls = await lessonUrls().catch(() => []);
-          await Promise.all(urls.map(async (u) => {
-            if (!(await cache.match(u))) await cache.add(u).catch(() => {});
-          }));
+          await Promise.all(urls.map((u) =>
+            fetch(u, { cache: 'no-cache' })
+              .then((r) => (r.ok ? cache.put(u, r) : null))
+              .catch(() => {})));
+          const clients = await self.clients.matchAll({ type: 'window' });
+          clients.forEach((c) => c.postMessage({ type: 'content-updated' }));
         }
       }
       return res;
