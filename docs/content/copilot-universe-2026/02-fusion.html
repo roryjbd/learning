@@ -2,7 +2,9 @@
 
 <p>The old <strong>Auto</strong> option helped a bit by choosing a model for you, but it still picked one model per request and stuck with it. It couldn't say "let the cheap model draft this, and only call the expensive one if the draft looks shaky".</p>
 
-<p><strong>Copilot Fusion</strong> is GitHub's answer. It went generally available at Universe on 28 October 2026, on all Copilot plans, in VS Code, the Copilot app, Copilot CLI and JetBrains IDEs. It replaces Auto in the model picker. It grew out of an experiment previously shown as <em>Project HydraFusion</em>.</p>
+<p><strong>Copilot Fusion</strong> is GitHub's answer. It went generally available at Universe on 28 October 2026, on all Copilot plans, in VS Code, the Copilot app, Copilot CLI and JetBrains IDEs. It replaces Auto in the model picker, combining Auto's model selection with the multi-model orchestration from GitHub's research preview, <em>Project HydraFusion</em>.</p>
+
+<p>GitHub's headline number: on the Artificial Analysis Coding Agent Index, Fusion Max scored 60, within two points of Claude Code with Opus 5.5 Max, at about half the average API cost per task and about 40% less time. That's a vendor-reported result, but it shows what the design is aiming for.</p>
 
 <div class="callout key"><span class="label">Key idea</span>
 Fusion is a router <em>and</em> an orchestrator. It can send a task to one model, or run a small workflow across several, and it only adds model calls when the task needs them. You choose how much effort to spend, not which model to use.
@@ -41,7 +43,9 @@ Fusion is a router <em>and</em> an orchestrator. It can send a task to one model
 </ol>
 
 <h3>Critique</h3>
-<p>One model drafts, a second model reviews the draft, and the first revises based on the review. Using different models for drafting and reviewing catches mistakes that a single model tends to repeat. Third-party coverage associates Critique mainly with the Max effort level, but GitHub hasn't published an exact mapping of levels to patterns, so treat that as indicative.</p>
+<p>One model drafts a response while other models critique it. GitHub's docs describe several models critiquing in parallel, with their feedback combined before the original model revises. Using different models for drafting and reviewing catches mistakes that a single model tends to repeat.</p>
+
+<p>Cascade and Critique both take longer than Single, because they include extra model calls for review. Which pattern runs depends on the effort level and the task. After a response, you can hover over the effort level name beneath it to see which models were used.</p>
 
 <div class="callout"><span class="label">Tip</span>
 If you've ever pasted a model's answer into a second model and asked "what's wrong with this?", Critique is that habit built in. If you've ever tried the cheap model first and switched when it failed, that's Cascade.
@@ -51,13 +55,15 @@ If you've ever pasted a model's answer into a second model and asked "what's wro
 
 <p>Fusion's routing decision takes into account the task itself and, according to GitHub's documentation, real-time system health and availability. If a provider is degraded, Fusion can steer around it rather than leaving you staring at a spinner.</p>
 
-<p>Routing always happens in the cloud. Support for local models is <strong>experimental</strong>, and even when a local model does some of the work, the routing decision is still made by GitHub's service, so a Fusion session isn't an offline session.</p>
+<p>Fusion can now also route to <strong>local models</strong>, in an opt-in <strong>experimental preview</strong>. On supported Windows devices the Copilot app can download and manage a local model (MAI Code 1.1 Flash) for you. Copilot CLI can also use manually configured local models on Windows, macOS and Linux. Fusion only considers local models at the <strong>Standard</strong> effort level.</p>
+
+<p>Two caveats from GitHub: routing still happens in the cloud, so a Fusion session with a local model <em>isn't</em> an offline session. And local models may have different safety protections from the cloud models Copilot provides.</p>
 
 <h2>What it costs</h2>
 
 <p>Since June 2026, Copilot usage has been billed in <strong>AI credits</strong>. Fusion doesn't add its own surcharge: you pay each model's standard rate for the work that model does. A Cascade that accepts the cheap draft costs only the cheap call. One that escalates costs both calls.</p>
 
-<p>That means the effort level is also a cost lever. Max may run several models on one task, so it can cost noticeably more per request than Standard. For a limited launch period, paid Copilot plans get a <strong>30% discount</strong> on model costs when using Fusion. Coverage disagrees about exactly when the discount ends, so check the changelog if you're planning around it.</p>
+<p>That means the effort level is also a cost lever. Max may run several models on one task, so it can cost noticeably more per request than Standard. For a limited time, paid Copilot plans get a <strong>30% discount</strong> on model costs when using Fusion. GitHub's JetBrains release notes say the discount lasts for the first 30 days, which puts the end at around late November 2026.</p>
 
 <table>
   <thead><tr><th>Situation</th><th>Sensible effort</th><th>Why</th></tr></thead>
@@ -70,10 +76,12 @@ If you've ever pasted a model's answer into a second model and asked "what's wro
 
 <h2>Controls for admins</h2>
 
-<p>Fusion respects the model policies you already have. If your enterprise or organisation has disabled a model, Fusion won't route to it. That's the main lever if your legal team has approved some providers and not others. Admins can also set a <strong>default effort level</strong> for their users.</p>
+<p>Fusion respects the model policies you already have. If your enterprise or organisation has disabled a model, Fusion won't route to it. That's the main lever if your legal team has approved some providers and not others. Enterprise admins can also see which models Fusion picks from, and disable a model <em>for Fusion only</em> without disabling it for everyone.</p>
+
+<p>Admins can make Copilot Fusion, at any effort level, the <strong>default model</strong> for their users through enterprise managed settings.</p>
 
 <div class="callout warn"><span class="label">Gotcha</span>
-Restricting models also restricts Fusion's options. If you lock an organisation down to a single model, Cascade and Critique have nothing to escalate to or critique with, and Fusion behaves much like the old single-model picker. Allow at least an efficient model and a strong model if you want the patterns to work.
+Restricting models also restricts Fusion's options. If you lock an organisation down to a single model, Cascade and Critique have nothing to escalate to or critique with, and Fusion behaves much like the old single-model picker. If <strong>Fusion Max is missing</strong> from the model picker, GitHub's docs say one of the models it needs is probably disabled.
 </div>
 
 <h2>When to still pick a model yourself</h2>
@@ -86,7 +94,7 @@ Restricting models also restricts Fusion's options. If you lock an organisation 
   <li>You choose an effort level (Standard, High or Max). Fast exists for low-latency spots like inline chat but isn't selectable.</li>
   <li>Fusion runs one of three patterns per task: Single, Cascade (draft then escalate if needed) or Critique (draft, review, revise).</li>
   <li>You pay each model's normal rate for the work it does, with a limited-time 30% discount on paid plans. Higher effort can mean more model calls and more credits.</li>
-  <li>Org and enterprise model policies limit which models Fusion may use, and admins can set a default effort level. Local models are experimental, and routing stays in the cloud.</li>
+  <li>Org and enterprise model policies limit which models Fusion may use, and admins can make Fusion the default model at any effort level. Local models are experimental, used only at Standard, and routing stays in the cloud.</li>
 </ul>
 
 <script type="application/json" class="quiz">
@@ -120,6 +128,17 @@ Restricting models also restricts Fusion's options. If you lock an organisation 
     "explain": "Even with a local model doing some of the work, Fusion's router runs in GitHub's cloud, so the session isn't offline."
   },
   {
+    "q": "Your enterprise admin disabled one provider's models, and now Fusion Max doesn't appear in the picker. What's the likely explanation?",
+    "options": [
+      "Fusion Max is only available in JetBrains",
+      "A model that Fusion Max needs is disabled by policy",
+      "Fusion Max requires a local model",
+      "The 30% discount has ended"
+    ],
+    "answer": 1,
+    "explain": "GitHub's docs say Fusion Max can disappear when one or more of the models it needs are disabled. Admins can disable models for Fusion separately from everyone else."
+  },
+  {
     "q": "Why can a Max-effort request cost more credits than a Standard one for the same prompt?",
     "options": [
       "Max adds a fixed Fusion surcharge",
@@ -140,17 +159,6 @@ Restricting models also restricts Fusion's options. If you lock an organisation 
     ],
     "answer": 2,
     "explain": "Fusion's routing can change between prompts. For reproducible comparisons you want a fixed model."
-  },
-  {
-    "q": "Which of these is true about Fusion effort levels?",
-    "options": [
-      "Fast is the default selectable level",
-      "Standard, High and Max are selectable, and Fast is used automatically in places like inline chat",
-      "Effort levels map one-to-one onto named models",
-      "Only admins can choose an effort level"
-    ],
-    "answer": 1,
-    "explain": "Users choose Standard, High or Max. Fast isn't selectable. Admins can set a default, but users still pick per task."
   }
 ]
 </script>

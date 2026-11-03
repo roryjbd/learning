@@ -65,28 +65,28 @@
           "id": "fusion",
           "file": "02-fusion.html",
           "title": "Copilot Fusion: effort, not models",
-          "minutes": 9,
+          "minutes": 10,
           "summary": "Model routing and orchestration: effort levels, Single, Cascade and Critique, and what it costs."
         },
         {
           "id": "app-and-harness",
           "file": "03-app-and-harness.html",
           "title": "The app, Projects and the shared harness",
-          "minutes": 9,
+          "minutes": 10,
           "summary": "One harness everywhere, Agent Host, cloud sandboxes, session continuity and multi-repo Projects."
         },
         {
           "id": "pull-requests",
           "file": "04-pull-requests.html",
           "title": "Agent Merge and code review Max",
-          "minutes": 8,
+          "minutes": 9,
           "summary": "Watch and fix for CI and conflicts, multi-agent reviews, approvals and a sceptical look at ReviewBench."
         },
         {
           "id": "automations",
           "file": "05-automations-and-workflows.html",
           "title": "Automations and Agentic Workflows",
-          "minutes": 8,
+          "minutes": 10,
           "summary": "Team-owned Copilot automations, and Markdown agent jobs compiled to GitHub Actions."
         },
         {
