@@ -11,6 +11,14 @@
 
 When you push new content, the app picks it up in the background the next time you open it with signal, and shows it on the open after that.
 
+## Kindle / e-reader
+
+```bash
+python3 scripts/build_epub.py agentcore
+```
+
+This writes `dist/agentcore.epub`, with each lesson as a chapter followed by its quiz and then the answers on a new page. Run it with no arguments to build every topic. To get it onto a Kindle, email it to your Send-to-Kindle address from an approved sender, or drop it into amazon.com/sendtokindle.
+
 ## Run locally
 
 ```bash

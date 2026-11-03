@@ -111,4 +111,6 @@ Then preview it with the `study` config in `.claude/launch.json` (port 8765) at 
 
 Pages deploys automatically from `main` → `/docs`. Commit and push only when the user asks or approves. After pushing, the site updates in about a minute, and phones pick up the new content in the background the next time the app is opened with signal.
 
+If the user also wants the topic on their Kindle, run `python3 scripts/build_epub.py <topic-id>` to rebuild `dist/<topic-id>.epub` (it's gitignored), then send it the way they choose. Ask before sending anything.
+
 Tell the user how many lessons were added, the word count and number of questions for each, and anything you couldn't verify.

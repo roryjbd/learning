@@ -4,8 +4,26 @@
     {
       "name": "study",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "docs"],
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8765",
+        "--directory",
+        "docs"
+      ],
       "port": 8765
+    },
+    {
+      "name": "epub-preview",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8766",
+        "--directory",
+        "dist/epub-preview"
+      ],
+      "port": 8766
     }
   ]
 }
