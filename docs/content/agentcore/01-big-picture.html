@@ -1,0 +1,163 @@
+<p>Getting an agent working on your laptop is the easy part. A model, a system prompt, a couple of tools and a loop, and you have a demo in an afternoon. The hard part is everything after that. Where does it run when a thousand people use it at once? How does it remember a user from last week? How does it call your internal APIs without you pasting keys into prompts? How do you stop it doing something it shouldn't, and how do you find out what it actually did?</p>
+
+<p><strong>Amazon Bedrock AgentCore</strong> is AWS's answer to that second half. It isn't an agent framework and it doesn't write your prompts. It's a set of managed services, each one solving a specific production problem, that you can use together or one at a time.</p>
+
+<div class="callout key"><span class="label">Key idea</span>
+AgentCore is <strong>framework-agnostic and model-agnostic</strong>. You can bring Strands Agents, LangGraph, CrewAI or your own hand-rolled loop, and call Bedrock models, OpenAI, Gemini or anything LiteLLM supports. AgentCore provides the infrastructure around the agent, not the agent itself.
+</div>
+
+<h2>What's in the box</h2>
+
+<p>Here's the full set of services. You don't need to memorise them yet. Later lessons go deep on the first five.</p>
+
+<div class="tiles">
+  <div><b>Runtime</b><span>Serverless hosting for agents and tools. Each session gets its own isolated microVM.</span></div>
+  <div><b>Harness</b><span>A managed agent loop. Describe the agent as config, no code or container.</span></div>
+  <div><b>Memory</b><span>Short-term conversation events plus long-term facts, preferences and summaries.</span></div>
+  <div><b>Gateway</b><span>Turns APIs, Lambdas and MCP servers into one MCP tool endpoint.</span></div>
+  <div><b>Identity</b><span>Inbound auth, plus a token vault so agents can act on a user's behalf.</span></div>
+  <div><b>Policy</b><span>Cedar rules that check every tool call going through Gateway.</span></div>
+  <div><b>Code Interpreter</b><span>A sandbox where the agent can run Python, JS or TS safely.</span></div>
+  <div><b>Browser</b><span>A managed headless browser the agent can drive.</span></div>
+  <div><b>Observability</b><span>OpenTelemetry traces and metrics into CloudWatch.</span></div>
+  <div><b>Evaluations</b><span>LLM-as-a-judge scoring of agent quality from traces.</span></div>
+  <div><b>Registry</b><span>A catalogue of agents, MCP servers, tools and skills across your org.</span></div>
+  <div><b>Payments</b><span>Lets agents pay for x402-protected APIs and content with microtransactions.</span></div>
+</div>
+
+<p>The services are <strong>modular</strong>. Each has its own API, so you can mix and match. An agent running on ECS or Lambda can still use AgentCore Memory, a Gateway can serve tools to an agent hosted somewhere else entirely, and so on. Using Runtime doesn't lock you into the rest.</p>
+
+<h2>Following one request through</h2>
+
+<p>The easiest way to see how the pieces fit is to follow a single user message all the way through a fully kitted-out agent:</p>
+
+<ol class="flow">
+  <li><b>Your app calls the agent</b><span>It sends a message and a session ID. The caller proves who it is with either AWS SigV4 or an OAuth JWT (Identity, inbound).</span></li>
+  <li><b>Runtime routes it to a session</b><span>The same session ID always lands in the same isolated microVM, so files and in-process state survive between turns.</span></li>
+  <li><b>The agent loop thinks</b><span>Your code (or the Harness) calls a model, maybe loading recent turns and relevant long-term facts from Memory first.</span></li>
+  <li><b>It needs a tool</b><span>The agent calls Gateway over MCP. Policy checks the call against Cedar rules before anything happens.</span></li>
+  <li><b>Gateway calls the real system</b><span>A Lambda, a REST API or another MCP server, using credentials fetched from Identity's token vault, never from the prompt.</span></li>
+  <li><b>The answer streams back</b><span>The turn is written to Memory as events, and traces go to CloudWatch for Observability and Evaluations.</span></li>
+</ol>
+
+<p>Keep this flow in your head. Every later lesson zooms into one of those boxes.</p>
+
+<h2>Harness or Runtime?</h2>
+
+<p>This is the first real decision you make, and it's simpler than it looks. Both run on the same underlying Runtime infrastructure. They differ in how much of the agent you write yourself.</p>
+
+<table>
+  <thead><tr><th></th><th>Harness</th><th>Runtime</th></tr></thead>
+  <tbody>
+    <tr><td>You provide</td><td>Configuration only</td><td>Agent code, as a container or a code bundle</td></tr>
+    <tr><td>Agent loop</td><td>Managed for you (built on Strands)</td><td>You write it, in any framework</td></tr>
+    <tr><td>Change the model or add a tool</td><td>Config change, no redeploy</td><td>Code change and redeploy</td></tr>
+    <tr><td>Best for</td><td>Getting a capable agent running fast</td><td>Custom control flow, graphs and workflows, bidirectional streaming</td></tr>
+  </tbody>
+</table>
+
+<p>A Harness is declared as a model, a system prompt, tools, skills, memory and limits. Each session still runs in its own microVM with a filesystem and a shell, so it's more powerful than it sounds. It comes with built-in <code>shell</code> and <code>file_operations</code> tools, and you can opt in to Gateway, remote MCP servers, Code Interpreter and Browser. It can even load <strong>Agent Skills</strong> (the <code>SKILL.md</code> format) from AWS, a Git repo, S3 or the session's filesystem.</p>
+
+<p>Many fields can also be overridden <em>per invocation</em>: model, system prompt, tools, skills and limits. That makes A/B testing a new model or prompt trivial.</p>
+
+<div class="callout"><span class="label">Rule of thumb</span>
+Start with a Harness. Drop down to Runtime when configuration stops being enough: you need a specific framework, a non-loop workflow, custom hooks, or full control over every step.
+</div>
+
+<h2>Control plane and data plane</h2>
+
+<p>Like most AWS services, AgentCore splits its API in two, and knowing which is which saves a lot of confusion when you read SDK code:</p>
+
+<ul>
+  <li><strong><code>bedrock-agentcore-control</code></strong> is the <em>control plane</em>. You use it to create and manage things: runtimes, endpoints, harnesses, memories, gateways, credential providers and policies.</li>
+  <li><strong><code>bedrock-agentcore</code></strong> is the <em>data plane</em>. You use it to do things: invoke an agent runtime or harness, write and read memory events, retrieve memory records, start Code Interpreter sessions.</li>
+  <li>Each Gateway also gets <strong>its own endpoint</strong>, which agents talk to over MCP.</li>
+</ul>
+
+<pre><code>import boto3
+
+control = boto3.client("bedrock-agentcore-control")  # create / configure
+data = boto3.client("bedrock-agentcore")             # invoke / read / write</code></pre>
+
+<h2>How you actually build with it</h2>
+
+<p>There are three main ways in, and you'll likely use more than one:</p>
+
+<ul>
+  <li><strong>The AgentCore CLI</strong> (<code>agentcore</code>, installed from npm). <code>agentcore create</code> scaffolds a project, <code>agentcore dev</code> runs it locally with an inspector, <code>agentcore deploy</code> ships it, and <code>agentcore invoke</code> talks to it. This is the fastest path.</li>
+  <li><strong>The Python SDK</strong> (<code>bedrock-agentcore</code>). Its <code>BedrockAgentCoreApp</code> wraps your agent so it speaks the Runtime contract, and it has helpers for Memory, Identity and the built-in tools. There's a TypeScript SDK too.</li>
+  <li><strong>Infrastructure as code</strong>. CloudFormation resources and CDK constructs (<code>aws_bedrockagentcore</code>) exist for runtimes, gateways, memories and credential providers.</li>
+</ul>
+
+<div class="callout warn"><span class="label">Heads up</span>
+If you've seen the older <strong>Bedrock Agents</strong> service (action groups, <code>bedrock-agent</code>), that's a different product. It's now in maintenance mode and closed to new customers. AWS points new agent work at AgentCore, and there's a migration path from classic agents to a Harness.
+</div>
+
+<h2>Why not just use Lambda or ECS?</h2>
+
+<p>You can, and plenty of people do. But agents have an awkward shape for general-purpose compute:</p>
+
+<ul>
+  <li><strong>They're long-running and bursty.</strong> A single turn might take seconds or many minutes, mostly spent <em>waiting</em> on a model. Runtime doesn't charge CPU while the agent waits on I/O like model responses or tool calls.</li>
+  <li><strong>They're stateful.</strong> A coding agent wants its checked-out repo to still be there on the next message. Runtime keeps a session's microVM alive for up to 8 hours.</li>
+  <li><strong>They run untrusted, model-generated actions.</strong> Hardware-level isolation per session means one user's agent can't see another's files or memory.</li>
+  <li><strong>They need identity plumbing</strong> that's painful to build yourself, such as OAuth consent flows, token refresh and per-user scoping.</li>
+</ul>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>AgentCore is the <em>production layer</em> around an agent: hosting, memory, tools, identity, policy, observability. It isn't a framework.</li>
+  <li>Services are modular, so use only the pieces you need.</li>
+  <li>Harness means a config-defined agent with a managed loop. Runtime means you bring the code.</li>
+  <li>The control plane (<code>bedrock-agentcore-control</code>) creates things. The data plane (<code>bedrock-agentcore</code>) uses them.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Which statement best describes AgentCore?",
+    "options": [
+      "An agent framework that replaces Strands and LangGraph",
+      "A set of managed services for running, connecting and securing agents built with any framework",
+      "A new family of foundation models tuned for tool use",
+      "A low-code UI for designing chatbots"
+    ],
+    "answer": 1,
+    "explain": "AgentCore is framework- and model-agnostic infrastructure. You bring the agent (or use the Harness), and AgentCore handles hosting, memory, tools, identity and so on."
+  },
+  {
+    "q": "You want an agent running today with no orchestration code and no container to build. What should you start with?",
+    "options": ["Runtime with a custom container", "Classic Bedrock Agents", "Harness", "Code Interpreter"],
+    "answer": 2,
+    "explain": "A Harness is a config-defined agent: model, prompt, tools, skills, memory and limits. AgentCore runs the loop for you. Runtime is for when you need to write the loop yourself."
+  },
+  {
+    "q": "Which client would you use to INVOKE a deployed agent runtime?",
+    "options": ["bedrock-agentcore-control", "bedrock-agentcore", "bedrock-agent", "bedrock-runtime"],
+    "answer": 1,
+    "explain": "bedrock-agentcore is the data plane, used to invoke agents and read or write memory. bedrock-agentcore-control is the control plane for creating and configuring resources."
+  },
+  {
+    "q": "Your team already runs its agent on ECS. Can it still use AgentCore Memory?",
+    "options": [
+      "No, Memory only works for agents hosted on AgentCore Runtime",
+      "Yes, each AgentCore service has its own API and can be used on its own",
+      "Only if the agent is rewritten as a Harness",
+      "Only through Gateway"
+    ],
+    "answer": 1,
+    "explain": "The services are modular. Memory, Gateway, Identity and the rest can be used by agents hosted anywhere."
+  },
+  {
+    "q": "In the request flow, where does Policy get a chance to block an action?",
+    "options": [
+      "When the user logs in",
+      "When a tool call passes through Gateway",
+      "When memory events are written",
+      "When the model generates text"
+    ],
+    "answer": 1,
+    "explain": "Policy intercepts tool calls going through AgentCore Gateway and evaluates each one against Cedar rules before the target is called."
+  }
+]
+</script>

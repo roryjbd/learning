@@ -1,0 +1,188 @@
+<p>When an agent opens a pull request, reads a calendar or posts to Slack, someone has to be accountable for it. Is the agent acting as <em>itself</em>, with its own service account? Or is it acting <em>on behalf of a specific user</em>, with only that user's permissions? Getting this wrong ranges from annoying (every user sees the same calendar) to dangerous (an agent with admin rights that any user can steer).</p>
+
+<p><strong>AgentCore Identity</strong> is the part of AgentCore that answers "who is this agent, who is it acting for, and how does it get credentials?" without secrets ever passing through a prompt.</p>
+
+<h2>Three separate auth problems</h2>
+
+<p>Most identity confusion comes from mixing up three distinct layers. They're configured independently, and a mistake in any of them shows up as the same unhelpful 401 or 403.</p>
+
+<table>
+  <thead><tr><th>Layer</th><th>Direction</th><th>Question it answers</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Inbound</strong></td><td>Caller → agent or gateway</td><td>Is this caller allowed to invoke me, and who are they?</td></tr>
+    <tr><td><strong>Outbound</strong></td><td>Agent → external API</td><td>What credentials does the agent use to call GitHub, Google, Jira…?</td></tr>
+    <tr><td><strong>Gateway → upstream</strong></td><td>Gateway → MCP server or API target</td><td>How does the gateway authenticate to each target?</td></tr>
+  </tbody>
+</table>
+
+<p>When something returns 403, the first step is always: <em>which of these three layers is failing?</em></p>
+
+<h2>Inbound: SigV4 or JWT</h2>
+
+<p>Runtimes, harnesses and gateways all accept one of two inbound methods:</p>
+<ul>
+  <li><strong>IAM SigV4</strong>: the caller signs the request with AWS credentials. Great for backend-to-backend calls inside AWS.</li>
+  <li><strong>OAuth JWT</strong>: the caller presents a token from your identity provider (Cognito, Okta, Entra ID, Auth0 or any OIDC provider). You configure a discovery URL plus <code>allowedAudience</code> and/or <code>allowedClients</code>.</li>
+</ul>
+
+<div class="callout key"><span class="label">The important difference</span>
+<strong>Only the JWT path carries a per-user identity through to downstream tools.</strong> SigV4 tells AgentCore which <em>AWS principal</em> called, not which end user. If your agent needs to act on behalf of individual users (their GitHub, their Google Drive), use JWT inbound auth.
+</div>
+
+<p>Always set <code>allowedAudience</code> or <code>allowedClients</code>. Without them, a JWT authorizer accepts any valid token from the issuer, including tokens issued for a completely different app.</p>
+
+<h2>The agent has its own identity too</h2>
+
+<p>Each agent gets a <strong>workload identity</strong>: an identity for the agent itself, separate from any user. That's what lets AgentCore say "agent X may fetch user Y's GitHub token" while agent Z can't, even for the same user.</p>
+
+<h2>Credential providers and the token vault</h2>
+
+<p>Outbound credentials live in <strong>credential providers</strong>, stored in AgentCore Identity's <strong>token vault</strong>:</p>
+
+<ul>
+  <li><strong>API key providers</strong> hold a static key for APIs that only support keys.</li>
+  <li><strong>OAuth2 providers</strong> hold an OAuth client ID and secret. There are ready-made configurations for popular services, GitHub and Google among them, and you can configure any other OAuth2 provider yourself.</li>
+</ul>
+
+<pre><code>control = boto3.client("bedrock-agentcore-control")
+control.create_oauth2_credential_provider(
+    name="github-provider",
+    credentialProviderVendor="GithubOauth2",
+    oauth2ProviderConfigInput={"githubOauth2ProviderConfig": {
+        "clientId": GITHUB_CLIENT_ID,
+        "clientSecret": GITHUB_CLIENT_SECRET,
+    }},
+)</code></pre>
+
+<p>AgentCore encrypts the secret and stores it in Secrets Manager for you. When you rotate it, go through the credential provider API (for example <code>update-api-key-credential-provider</code>), not Secrets Manager directly.</p>
+
+<h2>Two OAuth flows</h2>
+
+<table>
+  <thead><tr><th></th><th>Machine-to-machine (2LO)</th><th>User federation (3LO)</th></tr></thead>
+  <tbody>
+    <tr><td><code>auth_flow</code></td><td><code>M2M</code></td><td><code>USER_FEDERATION</code></td></tr>
+    <tr><td>OAuth grant</td><td>Client credentials</td><td>Authorization code</td></tr>
+    <tr><td>Acts as</td><td>The agent itself</td><td>A specific user, with their consent</td></tr>
+    <tr><td>Needs a human?</td><td>No</td><td>Yes, once, to approve access</td></tr>
+    <tr><td>Example</td><td>Agent reads a shared status API</td><td>Agent opens a PR as you on GitHub</td></tr>
+  </tbody>
+</table>
+
+<h3>Getting a token in code</h3>
+<p>The Python SDK's <code>@requires_access_token</code> decorator does the work. Your function receives a token as an argument. The model never sees it, and it never appears in a prompt:</p>
+
+<pre><code>from bedrock_agentcore.identity.auth import requires_access_token
+
+@requires_access_token(
+    provider_name="github-provider",
+    scopes=["repo"],
+    auth_flow="USER_FEDERATION",
+    on_auth_url=send_link_to_user,   # first time only
+    callback_url=CALLBACK_URL,
+)
+async def list_my_repos(*, access_token: str):
+    ...  # call the GitHub API with access_token</code></pre>
+
+<h3>What happens the first time</h3>
+<ol class="flow">
+  <li><b>No token in the vault yet</b><span>AgentCore generates an authorization URL and passes it to <code>on_auth_url</code>.</span></li>
+  <li><b>Your app shows the link</b><span>The user opens it and approves access on GitHub's own consent screen.</span></li>
+  <li><b>Callback and session binding</b><span>GitHub redirects back. Your app confirms the same user who started the flow finished it.</span></li>
+  <li><b>Token stored in the vault</b><span>Scoped to this agent's workload identity <em>and</em> this user.</span></li>
+  <li><b>Every later call</b><span>The token is fetched silently, and refreshed with the refresh token when it expires.</span></li>
+</ol>
+
+<h3>Session binding</h3>
+<p>Here's a subtle attack: a user starts the consent flow and accidentally pastes the authorization link into a team chat. Someone else clicks it and approves with <em>their</em> account. Now the first user's agent is holding someone else's token.</p>
+<p><strong>Session binding</strong> stops this. After consent, the browser returns to your callback with a session URI, and your app calls <code>CompleteResourceTokenAuth</code> with both that URI and the identity of the logged-in user. AgentCore only completes the exchange if it's the same user who started the flow. Authorization URLs also expire after 10 minutes.</p>
+
+<h2>Keeping secrets out of the model</h2>
+<p>The thread running through all of this is that <strong>credentials never belong in the model's context</strong>. If a token is in the prompt, a prompt injection can ask the model to repeat it. With Identity:</p>
+<ul>
+  <li>Tokens are injected into <em>code</em> (your tool function, or the gateway's outbound call), not text.</li>
+  <li>API keys and client secrets live in the vault, not in environment variables or system prompts.</li>
+  <li>Scopes limit the damage: ask for <code>repo</code> only if you need write access, and use a read-only scope if you don't.</li>
+</ul>
+
+<div class="callout warn"><span class="label">Trust boundary</span>
+Anyone who passes inbound auth on a Harness gets the whole session, including its shell and tools, and can send per-invocation overrides (model, skills, tools). If you put a Harness behind an app used by people you don't fully trust, validate their messages and <strong>strip or allowlist override fields</strong> in your own backend before calling <code>InvokeHarness</code>.
+</div>
+
+<h2>Prefer short-lived credentials</h2>
+<p>From best to worst: IAM roles (temporary, rotated automatically), then OAuth tokens (scoped, refreshable, revocable), then API keys (long-lived, all-or-nothing). Use API keys only when the target supports nothing better.</p>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Three layers: inbound, outbound and gateway → upstream. Work out which one is failing first.</li>
+  <li>JWT inbound auth is needed to carry per-user identity to downstream tools. SigV4 isn't enough.</li>
+  <li>The token vault holds API keys, OAuth clients and per-user tokens, scoped to agent and user.</li>
+  <li><code>M2M</code> means the agent acts as itself. <code>USER_FEDERATION</code> means it acts as a consenting user.</li>
+  <li>Session binding makes sure the user who approved access is the user who asked.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Your agent must open pull requests as the individual user who asked, not as a bot. Which OAuth flow do you use?",
+    "options": ["M2M (client credentials)", "USER_FEDERATION (authorization code)", "API key", "SigV4"],
+    "answer": 1,
+    "explain": "USER_FEDERATION is three-legged OAuth. The user consents once, and the agent then acts with that user's permissions."
+  },
+  {
+    "q": "Users call your runtime through a backend that signs with SigV4. Per-user GitHub tokens aren't working. Why?",
+    "options": [
+      "GitHub doesn't support OAuth",
+      "SigV4 identifies the AWS principal, not the end user. Per-user identity needs JWT inbound auth",
+      "The token vault only works in us-east-1",
+      "USER_FEDERATION requires an API key provider"
+    ],
+    "answer": 1,
+    "explain": "Only the OAuth JWT inbound path propagates a per-user identity to downstream tools and the token vault."
+  },
+  {
+    "q": "What does session binding protect against?",
+    "options": [
+      "Tokens expiring mid-session",
+      "A different person completing the consent flow from a shared authorization link",
+      "Two agents sharing one runtime",
+      "Rate limits on the OAuth provider"
+    ],
+    "answer": 1,
+    "explain": "Your app calls CompleteResourceTokenAuth with the logged-in user's identity, and AgentCore checks it's the same user who started the flow."
+  },
+  {
+    "q": "With @requires_access_token, where does the access token end up?",
+    "options": [
+      "In the model's system prompt",
+      "In an environment variable on the runtime",
+      "As an argument passed to your tool function, never in the model's context",
+      "In the user's browser cookies"
+    ],
+    "answer": 2,
+    "explain": "The token is injected into code, so the model never sees it and a prompt injection can't make it repeat it."
+  },
+  {
+    "q": "Your JWT authorizer has a discovery URL but no allowedAudience or allowedClients. What's the risk?",
+    "options": [
+      "None, the discovery URL is enough",
+      "It will accept any valid token from that issuer, including ones minted for other apps",
+      "It will reject every token",
+      "It falls back to SigV4"
+    ],
+    "answer": 1,
+    "explain": "Audience and client checks stop a token issued for a different service from being replayed against your agent."
+  },
+  {
+    "q": "Your agent gets a 403 from Jira through a gateway. What should you work out first?",
+    "options": [
+      "Which model the agent uses",
+      "Which auth layer is failing: inbound, outbound or gateway → upstream",
+      "Whether memory is enabled",
+      "The runtime's idle timeout"
+    ],
+    "answer": 1,
+    "explain": "The three layers are configured separately and all fail with similar errors. Find the failing layer before changing anything."
+  }
+]
+</script>

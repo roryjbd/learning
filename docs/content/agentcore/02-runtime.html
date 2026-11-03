@@ -1,0 +1,206 @@
+<p>AgentCore Runtime is where your agent's code actually runs. It's serverless: you hand it your agent, either as a container image or as a bundle of Python code, and it handles scaling, isolation and routing. It's also the foundation the Harness runs on, so even if you never write a Runtime agent yourself, it helps to understand how it behaves.</p>
+
+<h2>Sessions are the unit of everything</h2>
+
+<p>The single most important idea in Runtime is the <strong>session</strong>. Every invocation carries a <code>runtimeSessionId</code>, and Runtime gives each distinct session its own dedicated <strong>microVM</strong>, with its own kernel, memory and filesystem.</p>
+
+<ul>
+  <li>Call again with the <strong>same session ID</strong> and you land in the <strong>same microVM</strong>. Files the agent wrote, packages it installed and variables in memory are all still there.</li>
+  <li>Use a <strong>different session ID</strong> and you get a completely separate, isolated environment. One user's session can never see another's files.</li>
+</ul>
+
+<p>The session ID must be at least 33 characters. A standard UUID with hyphens (36 characters) works. Over HTTP it travels in the <code>X-Amzn-Bedrock-AgentCore-Runtime-Session-Id</code> header.</p>
+
+<div class="callout key"><span class="label">Why microVMs?</span>
+Agents run model-generated actions like shell commands, file edits and code. Hardware-level isolation per session means a prompt-injected agent in one session can't reach data in another. It's the same kind of isolation that separates Lambda functions, applied per conversation.
+</div>
+
+<h2>How long a session lives</h2>
+
+<p>Sessions don't last forever. On the default microVM compute type there are two clocks:</p>
+
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>What happens</th></tr></thead>
+  <tbody>
+    <tr><td><code>idleRuntimeSessionTimeout</code></td><td>15 minutes</td><td>No activity for this long and the microVM is terminated.</td></tr>
+    <tr><td><code>maxLifetime</code></td><td>8 hours</td><td>The microVM is terminated regardless of activity.</td></tr>
+  </tbody>
+</table>
+
+<p>Both are configurable in the runtime's lifecycle configuration, from 60 seconds up to 8 hours (28,800 seconds), and the idle timeout must be no larger than the max lifetime.</p>
+
+<p>When a session's microVM is terminated, the session ID isn't dead. The <em>next</em> call with that ID simply provisions a <strong>fresh</strong> microVM. Anything on the local disk is gone, unless you've set up persistent storage.</p>
+
+<h3>Keeping files across restarts</h3>
+
+<p>Imagine a coding agent that spends twenty minutes cloning a repo and installing dependencies. You go for lunch, the idle timeout fires, and when you come back it has to start from scratch. <strong>Managed session storage</strong> (in preview at the time of writing) fixes this. You declare a mount path when you create the runtime:</p>
+
+<pre><code>aws bedrock-agentcore-control create-agent-runtime \
+  ... \
+  --filesystem-configurations '[{"sessionStorage": {"mountPath": "/mnt/workspace"}}]'</code></pre>
+
+<p>Anything written under <code>/mnt/workspace</code> survives stop and resume for that session ID. The path must be directly under <code>/mnt</code> (one level deep), and there's a limit of 1 GB per session. For bigger or shared data you can mount EFS or S3 Files instead.</p>
+
+<h3>Running commands directly</h3>
+
+<p>Sometimes you don't want the model involved at all. "Run the test suite" is deterministic, so routing it through an LLM as a tool call just adds tokens, latency and a chance of it going wrong. <code>InvokeAgentRuntimeCommand</code> runs a shell command <em>inside an existing session</em>, in the same container with the same filesystem as the agent, and streams back stdout, stderr and the exit code.</p>
+
+<p>So a single session can mix <code>InvokeAgentRuntime</code> ("agent, fix this bug") with <code>InvokeAgentRuntimeCommand</code> (<code>npm test</code>). You'll see this pattern again in the coding-agent lesson.</p>
+
+<h2>Two compute types</h2>
+
+<table>
+  <thead><tr><th></th><th>microVMs (default)</th><th>Instances</th></tr></thead>
+  <tbody>
+    <tr><td>What it is</td><td>Fully managed, serverless, scales on demand</td><td>AWS-managed EC2 instances in <em>your</em> account, defined by a capacity provider</td></tr>
+    <tr><td>Session length</td><td>Up to 8 hours</td><td>Up to 14 days</td></tr>
+    <tr><td>Extras</td><td>Fast start, pay per use</td><td>GPUs, x86 or arm64, several agents sharing an instance, Savings Plans</td></tr>
+    <tr><td>Billing</td><td>Per second of CPU and memory actually used</td><td>EC2 instance cost plus a management fee</td></tr>
+  </tbody>
+</table>
+
+<p>You choose the compute type when you create the runtime and <strong>can't change it afterwards</strong>. For most agents, microVMs are the right default.</p>
+
+<h2>Pick a protocol</h2>
+
+<p>Runtime can host four kinds of server. Choose before you build, because each has a different contract:</p>
+
+<table>
+  <thead><tr><th>Protocol</th><th>Port and endpoints</th><th>Use when</th></tr></thead>
+  <tbody>
+    <tr><td><strong>HTTP</strong></td><td>8080: <code>GET /ping</code>, <code>POST /invocations</code> (JSON or SSE), optional <code>/ws</code></td><td>Most agents. Request in, response (or stream) out.</td></tr>
+    <tr><td><strong>MCP</strong></td><td>8000: <code>POST /mcp</code> (streamable HTTP)</td><td>You're hosting a <em>tool server</em> for other agents.</td></tr>
+    <tr><td><strong>A2A</strong></td><td>9000: agent card at <code>/.well-known/agent-card.json</code>, JSON-RPC on <code>/</code></td><td>Agents talking directly to other agents.</td></tr>
+    <tr><td><strong>AG-UI</strong></td><td>8080: SSE events on <code>/invocations</code></td><td>Streaming rich agent events straight to a front end.</td></tr>
+  </tbody>
+</table>
+
+<p>Not sure? Start with HTTP.</p>
+
+<h2>The container contract</h2>
+
+<p>If you deploy a container, it has to follow a few rules:</p>
+
+<ul>
+  <li><strong>ARM64 (Graviton).</strong> An x86 image won't start on microVMs. Build with <code>--platform linux/arm64</code>.</li>
+  <li><strong>A health check</strong> on <code>/ping</code> (for every protocol except MCP) that returns <code>{"status": "Healthy"}</code>, or <code>"HealthyBusy"</code> while the agent is doing background work so Runtime knows not to treat it as idle.</li>
+  <li><strong>Logs to stdout and stderr.</strong> They go to CloudWatch automatically.</li>
+  <li><strong>Handle SIGTERM</strong> so you shut down cleanly when a session ends.</li>
+</ul>
+
+<p>You rarely write this plumbing by hand. The Python SDK's <code>BedrockAgentCoreApp</code> gives you <code>/ping</code> and <code>/invocations</code> for free:</p>
+
+<pre><code>from bedrock_agentcore.runtime import BedrockAgentCoreApp
+from strands import Agent
+
+app = BedrockAgentCoreApp()
+agent = Agent(system_prompt="You are a helpful assistant.")
+
+@app.entrypoint
+def invoke(payload, context):
+    prompt = payload.get("prompt", "Hello")
+    return {"response": str(agent(prompt))}
+
+if __name__ == "__main__":
+    app.run()</code></pre>
+
+<p>Notice that <code>agent</code> is created at module level, outside the handler. Because a session keeps its microVM, that same <code>Agent</code> object, with its conversation history, is reused across turns in a session.</p>
+
+<h3>Container or direct code?</h3>
+<p>With <strong>container deployment</strong> you build an ARM64 image, push it to ECR and point the runtime at it. Maximum control, but slower to iterate. With <strong>direct code deployment</strong> you upload your Python code and dependencies as a bundle and AgentCore runs it, with no Dockerfile or ECR. Use that for fast iteration. The <code>agentcore</code> CLI handles either.</p>
+
+<h2>Versions and endpoints</h2>
+
+<p>Every update to a runtime creates a new immutable <strong>version</strong>. <strong>Endpoints</strong> are named pointers to a version, and they're what callers actually invoke. To roll back, you point the endpoint at an older version, with no rebuild.</p>
+
+<h2>Locking it down</h2>
+
+<ul>
+  <li><strong>Execution role:</strong> the IAM role the agent runs as. Scope it to exactly what that agent needs, and give each agent its own role.</li>
+  <li><strong>Inbound auth:</strong> callers use either IAM (SigV4) or an OAuth JWT authorizer. Never ship a production runtime that anyone can call.</li>
+  <li><strong>Network:</strong> <code>PUBLIC</code> mode is fine for experiments. Use <code>VPC</code> mode in production to reach private resources and control egress.</li>
+  <li><strong>No secrets in environment variables.</strong> Anyone with <code>GetAgentRuntime</code> can read them. Use Secrets Manager or AgentCore Identity (lesson 5).</li>
+</ul>
+
+<h2>What you pay for</h2>
+
+<p>On microVMs you're billed <strong>per second for the CPU and memory your session actually consumes</strong>. The important detail for agents is that <strong>CPU usage drops to zero while the agent is waiting on I/O</strong>: model responses, tool calls, database queries. Since most of an agent's life is spent waiting on a model, that's a big difference from paying for a server that's always on. Memory has a 128 MB billing minimum, and in Runtime v2 idle memory is reclaimed automatically.</p>
+
+<div class="callout"><span class="label">Watch out</span>
+Billing runs from when the microVM is ready until the session terminates, including idle time before the timeout fires. A shorter <code>idleRuntimeSessionTimeout</code> saves money for chatty, short-lived sessions.
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Session ID → dedicated microVM. Same ID, same environment. Different ID, total isolation.</li>
+  <li>Sessions end after 15 minutes idle or 8 hours total by default. Use session storage under <code>/mnt</code> to keep files.</li>
+  <li>Protocols are HTTP (default), MCP for tool servers, A2A for agent-to-agent, and AG-UI for front ends.</li>
+  <li>Containers must be ARM64 and answer <code>/ping</code>. <code>BedrockAgentCoreApp</code> does this for you.</li>
+  <li>You pay for consumed CPU and memory, and CPU is free while waiting on I/O.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "A user sends two messages with the same runtimeSessionId, five minutes apart. What happens on the second message?",
+    "options": [
+      "A new microVM starts with a clean filesystem",
+      "It's routed to the same microVM, so files and in-memory state from the first message are still there",
+      "It fails because session IDs are single-use",
+      "It's routed to whichever instance has spare capacity"
+    ],
+    "answer": 1,
+    "explain": "Same session ID means the same microVM, as long as it hasn't hit the idle timeout (15 minutes by default) or max lifetime (8 hours)."
+  },
+  {
+    "q": "Your agent's container builds and pushes fine but never starts on a microVM runtime. What's the most likely cause?",
+    "options": [
+      "It was built for x86_64 instead of ARM64",
+      "It listens on port 8080",
+      "It logs to stdout",
+      "It uses Strands instead of LangGraph"
+    ],
+    "answer": 0,
+    "explain": "microVM runtimes run on Graviton, so containers must be ARM64. Port 8080 and stdout logging are part of the HTTP contract."
+  },
+  {
+    "q": "A session's microVM was terminated after sitting idle. The user sends another message with the same session ID. What happens?",
+    "options": [
+      "An error saying the session expired",
+      "A fresh microVM is provisioned. Local files are gone unless they were in session storage",
+      "The old microVM is restored from a snapshot with everything intact",
+      "The message is queued until an admin restarts the session"
+    ],
+    "answer": 1,
+    "explain": "The session ID keeps working, but it gets a new microVM. Only data under a configured session storage mount (like /mnt/workspace) survives."
+  },
+  {
+    "q": "You're hosting a server whose job is to expose tools to OTHER agents. Which protocol fits best?",
+    "options": ["HTTP", "MCP", "A2A", "AG-UI"],
+    "answer": 1,
+    "explain": "MCP is the protocol for tool servers. A2A is for agent-to-agent conversations, and AG-UI is for streaming to front ends."
+  },
+  {
+    "q": "Why is Runtime's pricing a good fit for agents in particular?",
+    "options": [
+      "It's free for the first 8 hours of each session",
+      "It's billed per request, regardless of duration",
+      "CPU isn't billed while the agent waits on I/O such as model responses and tool calls",
+      "It charges only for tokens generated"
+    ],
+    "answer": 2,
+    "explain": "Agents spend most of their time waiting on models and tools. Runtime bills consumed CPU and memory per second, and CPU drops to zero during I/O wait."
+  },
+  {
+    "q": "Where should your agent's third-party API key go?",
+    "options": [
+      "An environment variable on the runtime",
+      "Hard-coded in the container image",
+      "Secrets Manager or an AgentCore Identity credential provider",
+      "The system prompt, so the model can use it"
+    ],
+    "answer": 2,
+    "explain": "Runtime environment variables are visible to anyone who can call GetAgentRuntime. Store secrets in Secrets Manager or an AgentCore Identity credential provider."
+  }
+]
+</script>

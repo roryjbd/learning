@@ -1,0 +1,187 @@
+<p>An agent without tools can only talk. Tools are how it looks things up, changes things and gets work done. The trouble starts when you have several agents and dozens of tools: every agent needs its own client code for every API, every API has its own auth scheme, and credentials end up scattered everywhere.</p>
+
+<p><strong>AgentCore Gateway</strong> puts a single front door on all of that. Agents talk to one endpoint using <strong>MCP</strong> (the Model Context Protocol). Behind it, Gateway connects to your Lambda functions, REST APIs, AWS services and other MCP servers, translating protocols and handling credentials on the way.</p>
+
+<h2>The shape of a gateway</h2>
+
+<ol class="flow">
+  <li><b>Agent</b><span>Speaks MCP: <code>tools/list</code> and <code>tools/call</code>.</span></li>
+  <li><b>Inbound authorizer</b><span>Is this caller allowed to use the gateway at all?</span></li>
+  <li><b>Gateway + Policy</b><span>Finds the right target and checks the call against Cedar rules.</span></li>
+  <li><b>Outbound credentials</b><span>IAM role, API key or OAuth token, fetched for this target.</span></li>
+  <li><b>Target</b><span>Lambda, OpenAPI, Smithy, API Gateway stage or MCP server.</span></li>
+</ol>
+
+<h2>Targets</h2>
+
+<p>A <strong>target</strong> is a backend the gateway connects to. Most targets are <strong>MCP targets</strong>, and the gateway runs them in <em>aggregation mode</em>: it acts as one virtual MCP server whose tool list is the combination of every target's tools. The agent sees one consolidated <code>tools/list</code>.</p>
+
+<table>
+  <thead><tr><th>Target type</th><th>You provide</th><th>Good for</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Lambda</strong></td><td>A function ARN plus a tool schema</td><td>Custom logic in any language</td></tr>
+    <tr><td><strong>OpenAPI</strong></td><td>An OpenAPI 3.x spec (in S3 or inline)</td><td>Existing REST APIs</td></tr>
+    <tr><td><strong>Smithy</strong></td><td>A Smithy model</td><td>AWS service APIs</td></tr>
+    <tr><td><strong>API Gateway stage</strong></td><td>A REST API stage</td><td>APIs you already front with API Gateway</td></tr>
+    <tr><td><strong>MCP server</strong></td><td>The server's URL</td><td>Remote MCP servers, including other gateways</td></tr>
+    <tr><td><strong>Integration templates</strong></td><td>Pick one and add credentials</td><td>Slack, Jira, Confluence, Salesforce, Zendesk, ServiceNow, PagerDuty and more</td></tr>
+  </tbody>
+</table>
+
+<p>Beyond MCP targets there are two other categories. <strong>HTTP targets</strong> proxy traffic straight to another HTTP service, such as an agent on Runtime or an A2A agent, with no aggregation. <strong>Inference targets</strong> route model requests to one or more model providers through a single endpoint.</p>
+
+<div class="callout"><span class="label">Tip</span>
+For OpenAPI targets, the <strong>operation descriptions in your spec become the tool descriptions the model reads</strong>. A spec full of <code>summary: "getThing"</code> produces tools the model won't know how to use. Write them for an LLM reader.
+</div>
+
+<h3>Tool names</h3>
+<p>Since many targets are merged into one list, Gateway prefixes each tool with its target name, separated by three underscores. A <code>process_refund</code> operation on a target called <code>RefundTarget</code> becomes <code>RefundTarget___process_refund</code>. You'll see these names again in Policy.</p>
+
+<h3>Semantic tool search</h3>
+<p>Give a model 300 tool definitions and it gets slower, more expensive and worse at choosing. Gateway can offer <strong>semantic tool search</strong> as a built-in tool: the agent describes what it's trying to do and gets back just the handful of relevant tools, across every target type.</p>
+
+<h2>Two directions of auth</h2>
+
+<p>This is the part people trip over. A gateway has <strong>inbound</strong> auth (who may call the gateway) and <strong>outbound</strong> auth (how the gateway calls each target), configured completely separately.</p>
+
+<h3>Inbound: who can use the gateway?</h3>
+<ul>
+  <li><strong>OAuth (JWT)</strong>: callers present a token from your identity provider (Cognito, Okta, Entra ID, Auth0…).</li>
+  <li><strong>IAM (SigV4)</strong>: callers sign requests with AWS credentials.</li>
+  <li><strong>Authenticate only</strong>: the token is validated, and the decision about what's allowed is left to the target.</li>
+  <li><strong>No authorization</strong>: development and testing only.</li>
+</ul>
+
+<h3>Outbound: how does the gateway reach the target?</h3>
+<ul>
+  <li><strong>Lambda and Smithy targets</strong> use the gateway's IAM execution role. Scope it to exactly the functions and APIs needed.</li>
+  <li><strong>OpenAPI and MCP server targets</strong> use an AgentCore Identity <strong>credential provider</strong> (an API key or OAuth client), SigV4 signing, or nothing for public endpoints.</li>
+</ul>
+
+<div class="callout warn"><span class="label">Order matters</span>
+Create the credential provider <strong>before</strong> the target that uses it. Creating the target first fails with "credential provider not found". The provider stores the secret in Secrets Manager for you, so don't create that secret yourself.
+</div>
+
+<p>Targets go through statuses as they're created. Wait for <code>READY</code>. An MCP server target that needs a human to log in (three-legged OAuth) sits in <code>CREATE_PENDING_AUTH</code> until someone completes consent. MCP server targets can also be <code>SYNCHRONIZING</code> while Gateway refreshes their tool list.</p>
+
+<h2>Calling a gateway from an agent</h2>
+
+<p>To your agent, a gateway is just a remote MCP server. With Strands it looks like this:</p>
+
+<pre><code>from strands import Agent
+from strands.tools.mcp import MCPClient
+from mcp.client.streamable_http import streamablehttp_client
+
+gateway = MCPClient(lambda: streamablehttp_client(
+    GATEWAY_URL,
+    headers={"Authorization": f"Bearer {access_token}"},
+))
+
+with gateway:
+    agent = Agent(tools=gateway.list_tools_sync())
+    agent("Refund order 1182, it arrived damaged")</code></pre>
+
+<p>With a Harness it's even simpler: add a tool of type <code>agentcore_gateway</code> with the gateway's ARN.</p>
+
+<h2>Policy: rules the model can't argue with</h2>
+
+<p>System prompts are suggestions. A model can be talked out of "never refund more than £1,000" by a cleverly worded email it was asked to summarise. <strong>Policy in AgentCore</strong> puts hard rules <em>outside</em> the model, at the gateway, where every tool call is checked before it reaches the target.</p>
+
+<p>Policies are written in <strong>Cedar</strong>, AWS's open-source authorization language:</p>
+
+<pre><code>permit(
+  principal,
+  action == AgentCore::Action::"RefundTarget___process_refund",
+  resource == AgentCore::Gateway::"&lt;gateway-arn&gt;"
+)
+when {
+  context.input.amount &lt; 1000
+};</code></pre>
+
+<p>Read it as: allow the <code>process_refund</code> tool on this gateway <strong>when</strong> the <code>amount</code> argument is under 1000. Cedar's semantics are simple and strict:</p>
+<ul>
+  <li>If no <code>permit</code> matches, the request is <strong>denied</strong> (deny by default).</li>
+  <li>A matching <code>forbid</code> <strong>always wins</strong> over any <code>permit</code>.</li>
+  <li>Conditions can look at who's calling, which tool it is, and the actual tool arguments (<code>context.input</code>).</li>
+</ul>
+
+<h3>Writing policies in plain English</h3>
+<p>You don't have to write Cedar by hand. Describe the rule in natural language and AgentCore generates the Cedar for you (<code>agentcore gateway policy generate</code> in the CLI). The interesting part is how it checks itself:</p>
+<ol>
+  <li>An LLM translates your description into Cedar.</li>
+  <li>A Cedar <strong>schema</strong> is generated from your gateway's real tool definitions, and the policy is validated against it, so it can't reference tools or arguments that don't exist.</li>
+  <li><strong>Cedar Analysis</strong> uses automated reasoning to catch policies that allow everything, deny everything or can never match, and checks how the whole policy set interacts when you attach it.</li>
+</ol>
+
+<div class="callout key"><span class="label">Why it matters</span>
+Policy is <strong>deterministic</strong>. It doesn't ask a model whether a call looks OK. It evaluates rules. That's what makes it robust to prompt injection: the model can be fooled, but the rule can't.
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Gateway gives agents one MCP endpoint over many targets: Lambda, OpenAPI, Smithy, API Gateway, MCP servers and integration templates.</li>
+  <li>Tools are named <code>Target___tool</code>. Semantic search helps when there are lots of them.</li>
+  <li>Inbound auth (JWT, IAM) and outbound auth (IAM role, credential provider) are configured separately. Create credential providers first.</li>
+  <li>Policy checks every tool call with Cedar: deny by default, and <code>forbid</code> beats <code>permit</code>.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Your gateway has three MCP targets. What does an agent see when it calls tools/list?",
+    "options": [
+      "Only the first target's tools",
+      "One consolidated list containing tools from all three targets",
+      "Three separate endpoints, one per target",
+      "Nothing until it selects a target"
+    ],
+    "answer": 1,
+    "explain": "MCP targets run in aggregation mode. The gateway acts as one virtual MCP server combining every target's tools."
+  },
+  {
+    "q": "Creating an OpenAPI target fails with 'credential provider not found'. What went wrong?",
+    "options": [
+      "OpenAPI targets don't support authentication",
+      "The credential provider has to be created before the target that references it",
+      "The spec must be OpenAPI 2.0",
+      "The gateway needs a VPC"
+    ],
+    "answer": 1,
+    "explain": "Credential providers (API key or OAuth) must exist before you create the target that uses them."
+  },
+  {
+    "q": "How does a Lambda target authenticate when the gateway calls it?",
+    "options": [
+      "With an API key credential provider",
+      "With the end user's OAuth token",
+      "With the gateway's IAM execution role",
+      "It doesn't, Lambda targets are public"
+    ],
+    "answer": 2,
+    "explain": "Lambda and Smithy targets are called using the gateway's IAM role. Scope that role to the specific function ARNs."
+  },
+  {
+    "q": "A policy set has a permit for a tool and a forbid that also matches the same call. What happens?",
+    "options": ["The call is allowed", "The call is denied", "The model decides", "Whichever policy was written last wins"],
+    "answer": 1,
+    "explain": "In Cedar, a matching forbid always overrides permits. With no matching permit at all, the default is also deny."
+  },
+  {
+    "q": "Why is Policy more robust to prompt injection than putting rules in the system prompt?",
+    "options": [
+      "It uses a larger model to double-check each call",
+      "It evaluates deterministic Cedar rules on every tool call at the gateway, outside the model",
+      "It hides tool descriptions from the model",
+      "It rate-limits the agent"
+    ],
+    "answer": 1,
+    "explain": "A model can be persuaded to ignore instructions. A Cedar rule evaluated at the gateway can't be argued with."
+  },
+  {
+    "q": "Your agent has access to 250 tools and keeps choosing badly. Which Gateway feature helps most?",
+    "options": ["Semantic tool search", "Authenticate-only inbound auth", "Smithy targets", "Inference targets"],
+    "answer": 0,
+    "explain": "Semantic tool search lets the agent ask for the few relevant tools instead of carrying all 250 definitions in its context."
+  }
+]
+</script>

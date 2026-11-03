@@ -1,0 +1,214 @@
+<p>Models are stateless. Every call starts from nothing, and the only "memory" an agent has is whatever you put back into the prompt. That's fine for one turn, but real agents need to remember two very different kinds of thing:</p>
+
+<ul>
+  <li><strong>What just happened</strong>: the last few messages in this conversation, the tool call that just failed, the file the user mentioned two turns ago.</li>
+  <li><strong>What it has learned</strong>: this user prefers Python, their company has three offices, last week we decided to use Postgres.</li>
+</ul>
+
+<p>AgentCore Memory handles both, as <strong>short-term</strong> and <strong>long-term</strong> memory, inside one managed resource.</p>
+
+<h2>The three IDs</h2>
+
+<p>Everything in Memory is organised by three identifiers. Get these straight and the rest falls into place.</p>
+
+<table>
+  <thead><tr><th>ID</th><th>What it is</th><th>Example</th></tr></thead>
+  <tbody>
+    <tr><td><code>memoryId</code></td><td>The memory resource itself. You usually have one per agent or application.</td><td><code>SupportMemory-8f3k2j9d1a</code></td></tr>
+    <tr><td><code>actorId</code></td><td>Who the memory is about: a user, another agent, or a system.</td><td><code>user-4821</code></td></tr>
+    <tr><td><code>sessionId</code></td><td>One conversation or interaction period.</td><td><code>2026-11-03-morning-chat</code></td></tr>
+  </tbody>
+</table>
+
+<p>Short-term memory is scoped by <strong>actor + session</strong>, so each user's conversations are kept separate. Long-term memory is usually scoped by <strong>actor</strong>, so what's learned in one session is available in the next.</p>
+
+<div class="callout warn"><span class="label">Security</span>
+<code>actorId</code> is a trust boundary. Derive it from the authenticated user on your server side. Never let the caller pass in whatever <code>actorId</code> they like, or they can read someone else's memories.
+</div>
+
+<h2>Short-term memory: events</h2>
+
+<p>Short-term memory is a log of <strong>events</strong>. Each one is immutable and stored synchronously, so you can read it back straight away. There are two kinds:</p>
+
+<ul>
+  <li><strong>Conversational</strong> events have a role (<code>USER</code>, <code>ASSISTANT</code>, <code>TOOL</code>…) and content. These are your chat transcript.</li>
+  <li><strong>Blob</strong> events hold arbitrary data, such as checkpoints or serialised agent state. They're stored, but they <em>aren't</em> used for long-term extraction.</li>
+</ul>
+
+<pre><code>import time, boto3
+mem = boto3.client("bedrock-agentcore")
+
+# Record a turn
+mem.create_event(
+    memoryId=MEMORY_ID,
+    actorId="user-4821",
+    sessionId=session_id,
+    eventTimestamp=int(time.time() * 1000),
+    payload=[
+        {"conversational": {"role": "USER",
+            "content": {"text": "I prefer Python for scripts"}}},
+        {"conversational": {"role": "ASSISTANT",
+            "content": {"text": "Noted, I'll use Python."}}},
+    ],
+)
+
+# Load recent context at the start of the next turn
+recent = mem.list_events(
+    memoryId=MEMORY_ID, actorId="user-4821",
+    sessionId=session_id, maxResults=10,
+)</code></pre>
+
+<p>When you create the memory resource you set <code>eventExpiryDuration</code>, the number of days raw events are kept. Short-term data is high volume and loses value quickly, so don't keep it longer than you need.</p>
+
+<h2>Long-term memory: strategies</h2>
+
+<p>Raw transcripts are a terrible long-term memory. They're huge, repetitive and mostly noise. Long-term memory works by <strong>extracting</strong> the useful parts. You attach one or more <strong>strategies</strong> to the memory resource, and AgentCore reads new conversational events <em>asynchronously</em> in the background and turns them into compact <strong>memory records</strong>.</p>
+
+<table>
+  <thead><tr><th>Strategy</th><th>Extracts</th><th>Example record</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Semantic</strong></td><td>Facts and knowledge</td><td>"The customer's company has 500 employees across Seattle, Austin and Boston."</td></tr>
+    <tr><td><strong>User preference</strong></td><td>Likes, choices and styles</td><td>"Prefers detailed technical explanations. Uses Python."</td></tr>
+    <tr><td><strong>Summary</strong></td><td>A running summary of a session</td><td>"Asked about enterprise pricing, discussed timeline, wants a demo."</td></tr>
+    <tr><td><strong>Episodic</strong></td><td>Episodes (what happened and how it turned out), plus reflections across episodes</td><td>"Deploy failed on missing IAM permission. Fixed by adding iam:PassRole."</td></tr>
+  </tbody>
+</table>
+
+<p>Extraction also <strong>consolidates</strong>: if a user says they've switched from Python to Go, the preference record is updated rather than a contradicting record being added next to it.</p>
+
+<p>If the built-ins don't fit your domain you have two escape hatches:</p>
+<ul>
+  <li><strong>Custom strategies</strong> let you pick the model and override the extraction and consolidation prompts. For example, "only extract facts about the user's infrastructure".</li>
+  <li><strong>Self-managed strategies</strong> hand the work to you. AgentCore notifies you via SNS when there's new data, and your own pipeline (say, a Lambda) does the extraction and writes records back.</li>
+</ul>
+
+<h3>Namespaces</h3>
+
+<p>Each strategy writes its records into a <strong>namespace</strong>, a path built from a template:</p>
+
+<pre><code>strategies = [
+  {"semanticMemoryStrategy": {
+      "name": "facts",
+      "namespaceTemplate": ["/users/{actorId}/facts/"]}},
+  {"userPreferenceMemoryStrategy": {
+      "name": "prefs",
+      "namespaceTemplate": ["/users/{actorId}/preferences/"]}},
+  {"summaryMemoryStrategy": {
+      "name": "summaries",
+      "namespaceTemplate": ["/users/{actorId}/{sessionId}/summary/"]}},
+]</code></pre>
+
+<p><code>{actorId}</code> and <code>{sessionId}</code> are filled in from the event. Namespaces do two jobs: they <strong>isolate</strong> users from each other, and they let you <strong>scope retrieval</strong>. Ask only the preferences namespace when you're deciding how to format an answer, or only the facts namespace when you're answering a question.</p>
+
+<h2>Getting memories back out</h2>
+
+<table>
+  <thead><tr><th>API</th><th>Use it to</th></tr></thead>
+  <tbody>
+    <tr><td><code>RetrieveMemoryRecords</code></td><td>Semantic search: "find records relevant to this query". This is the one you call during a conversation.</td></tr>
+    <tr><td><code>ListMemoryRecords</code></td><td>Enumerate everything in a namespace, for a "here's what I remember about you" screen or an audit.</td></tr>
+    <tr><td><code>GetMemoryRecord</code> / <code>DeleteMemoryRecord</code></td><td>Work on a single record, for example when a user asks you to forget something.</td></tr>
+  </tbody>
+</table>
+
+<pre><code>hits = mem.retrieve_memory_records(
+    memoryId=MEMORY_ID,
+    namespace="/users/user-4821/facts/",
+    searchCriteria={"searchQuery": user_message, "topK": 5},
+)</code></pre>
+
+<p>Passing the user's message straight in as <code>searchQuery</code> works when it maps naturally to stored memories ("what's my budget?"). For vague requests ("help me plan my next trip") it often helps to have the model write a better search query first, at the cost of an extra model call.</p>
+
+<h2>Putting it in the loop</h2>
+
+<p>A typical turn with memory looks like this:</p>
+
+<ol class="flow">
+  <li><b>Load short-term context</b><span><code>ListEvents</code> for the last N turns of this session.</span></li>
+  <li><b>Recall long-term context</b><span><code>RetrieveMemoryRecords</code> against the relevant namespaces.</span></li>
+  <li><b>Call the model</b><span>With recent turns and retrieved records added to the prompt.</span></li>
+  <li><b>Save the turn</b><span><code>CreateEvent</code> with the user message and the reply. Extraction runs later, in the background.</span></li>
+</ol>
+
+<p>You often don't write this yourself:</p>
+<ul>
+  <li><strong>Strands Agents</strong> has an AgentCore Memory session manager that does the loading and saving for you.</li>
+  <li>A <strong>Harness</strong> takes a <code>memory</code> setting (managed memory, your own memory ARN, or disabled) and an <code>actorId</code> per invocation, and wires up short- and long-term memory automatically.</li>
+</ul>
+
+<div class="callout"><span class="label">Gotcha</span>
+Extraction is <strong>asynchronous</strong>. A fact mentioned a moment ago is in short-term events immediately, but it may not be a retrievable long-term record yet. Don't write tests that create an event and instantly expect <code>RetrieveMemoryRecords</code> to find it.
+</div>
+
+<h2>Designing it well</h2>
+<ul>
+  <li><strong>Memory sits on the hot path.</strong> Retrieval latency is paid on every turn, and sometimes on every reasoning step. Retrieve once per turn where you can, and keep <code>topK</code> small.</li>
+  <li><strong>Different memories deserve different lifetimes.</strong> Expire raw events and session summaries first. Keep distilled facts and preferences much longer.</li>
+  <li><strong>Encrypt it.</strong> Memory holds conversation content, which often contains personal data. Use a customer-managed KMS key for regulated workloads.</li>
+  <li><strong>Scope IAM tightly.</strong> Grant the specific Memory actions an agent needs, not <code>bedrock-agentcore:*</code>.</li>
+</ul>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Short-term memory is immutable events, scoped by actor and session, readable immediately.</li>
+  <li>Long-term memory is records extracted asynchronously by strategies: semantic, user preference, summary and episodic, or your own.</li>
+  <li>Namespaces like <code>/users/{actorId}/facts/</code> isolate users and focus retrieval.</li>
+  <li>Use <code>RetrieveMemoryRecords</code> to recall what's relevant and <code>ListMemoryRecords</code> to enumerate.</li>
+  <li>Treat <code>actorId</code> as security-sensitive and set it on the server.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Which pair of identifiers scopes short-term memory events?",
+    "options": ["memoryId and namespace", "actorId and sessionId", "runtimeSessionId and region", "strategyId and topK"],
+    "answer": 1,
+    "explain": "Events are written and listed per actor and session, which keeps each user's conversations separate."
+  },
+  {
+    "q": "A user says 'I always deploy to eu-west-2'. Which built-in strategy is designed to capture that?",
+    "options": ["Summary", "User preference", "Episodic", "Blob"],
+    "answer": 1,
+    "explain": "User preference extracts choices and styles. Semantic would capture general facts, and summary captures a per-session recap."
+  },
+  {
+    "q": "You call CreateEvent and then immediately call RetrieveMemoryRecords for the same fact, but nothing comes back. Why?",
+    "options": [
+      "CreateEvent failed silently",
+      "Long-term extraction runs asynchronously, so the record may not exist yet",
+      "RetrieveMemoryRecords only searches blob events",
+      "Records are only created when the session ends"
+    ],
+    "answer": 1,
+    "explain": "Events are stored synchronously, but strategies extract long-term records in the background. Give it time, or read recent context from ListEvents."
+  },
+  {
+    "q": "What's the main purpose of a namespace template like /users/{actorId}/preferences/?",
+    "options": [
+      "To set how long events are kept",
+      "To choose which model does extraction",
+      "To organise records per user and per strategy, so they're isolated and retrieval can be scoped",
+      "To encrypt records with a per-user key"
+    ],
+    "answer": 2,
+    "explain": "Namespaces isolate users from each other and let you query just the slice of memory that's relevant to the current step."
+  },
+  {
+    "q": "Your app lets the browser send actorId directly in the request body. What's the risk?",
+    "options": [
+      "None, actorId is only used for metrics",
+      "A user could set someone else's actorId and read or pollute their memories",
+      "Extraction will run twice",
+      "It will exceed the event size limit"
+    ],
+    "answer": 1,
+    "explain": "actorId decides whose memories are read and written. Derive it on the server from the authenticated identity."
+  },
+  {
+    "q": "Which kind of event is stored but NOT used for long-term extraction?",
+    "options": ["USER conversational events", "ASSISTANT conversational events", "TOOL conversational events", "Blob events"],
+    "answer": 3,
+    "explain": "Blob events are for arbitrary data like checkpoints and agent state. Only conversational events feed the strategies."
+  }
+]
+</script>

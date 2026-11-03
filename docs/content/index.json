@@ -1,0 +1,53 @@
+{
+  "topics": [
+    {
+      "id": "agentcore",
+      "title": "AWS AgentCore",
+      "description": "Amazon Bedrock AgentCore: the managed platform for running, connecting and securing AI agents on AWS.",
+      "lessons": [
+        {
+          "id": "big-picture",
+          "file": "01-big-picture.html",
+          "title": "The big picture",
+          "minutes": 9,
+          "summary": "What AgentCore is, the services in the box, and Harness versus Runtime."
+        },
+        {
+          "id": "runtime",
+          "file": "02-runtime.html",
+          "title": "Runtime: hosting your agent",
+          "minutes": 11,
+          "summary": "MicroVM sessions, protocols, the container contract, lifecycle limits and what you pay for."
+        },
+        {
+          "id": "memory",
+          "file": "03-memory.html",
+          "title": "Memory: short-term and long-term",
+          "minutes": 10,
+          "summary": "Events, actors and sessions, extraction strategies, namespaces, and retrieving what matters."
+        },
+        {
+          "id": "gateway",
+          "file": "04-gateway.html",
+          "title": "Gateway and Policy: giving agents tools",
+          "minutes": 11,
+          "summary": "Turn APIs, Lambdas and MCP servers into one tool endpoint, then fence it in with Cedar."
+        },
+        {
+          "id": "identity",
+          "file": "05-identity.html",
+          "title": "Identity: who is the agent acting for?",
+          "minutes": 10,
+          "summary": "Inbound auth, the token vault, three-legged OAuth and keeping secrets out of prompts."
+        },
+        {
+          "id": "coding-agent",
+          "file": "06-coding-agent.html",
+          "title": "Build it: a GitHub coding agent",
+          "minutes": 12,
+          "summary": "Put it all together: an agent that clones a repo, fixes an issue, runs tests and opens a PR."
+        }
+      ]
+    }
+  ]
+}
