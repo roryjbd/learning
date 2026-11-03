@@ -1,0 +1,141 @@
+<p>For most of its life, GitHub Copilot was something that sat in your editor and guessed the next line. Then it gained a chat panel, then an agent mode, then a cloud agent that opened pull requests while you did something else. Each step was useful, but they arrived as separate products with separate settings, separate model pickers and separate places to look for your work.</p>
+
+<p>GitHub Universe 2026 ran on 28 and 29 October in San Francisco, and most of the Copilot announcements, dated 28 October in the changelog, were about joining those pieces up. The pitch GitHub and most commentators settled on was that Copilot is moving <strong>from a coding assistant to a software delivery system</strong>: something that plans work across repositories, writes the code, reviews it, fixes the CI failures and gets the pull request merged.</p>
+
+<p>This lesson is the map. The rest of the topic takes each area in turn.</p>
+
+<div class="callout key"><span class="label">Key idea</span>
+Universe 2026 wasn't one big feature. It was a set of pieces that cover the whole loop: choose the model, run the agent anywhere, coordinate many agents, and close out the pull request. Read every announcement as "which step of the loop does this own?"
+</div>
+
+<h2>The loop Copilot now covers</h2>
+
+<p>It helps to picture a single piece of work, say "add rate limiting to the public API", and follow it through:</p>
+
+<ol class="flow">
+  <li><b>Plan</b><span>A Copilot <em>Project</em> gathers the repos, design notes and Slack threads involved, and splits the goal into agent tasks.</span></li>
+  <li><b>Pick the model</b><span><em>Copilot Fusion</em> decides which model, or combination of models, handles each step.</span></li>
+  <li><b>Do the work</b><span>Agents run in cloud sandboxes or locally, on one shared <em>harness</em>, and you can follow a session from your laptop, phone or the web.</span></li>
+  <li><b>Review</b><span><em>Copilot code review</em> reviews the pull request, now with a multi-agent <em>Max</em> level, and can approve it.</span></li>
+  <li><b>Merge</b><span><em>Agent Merge</em> watches the PR and fixes failing checks and merge conflicts until it can merge.</span></li>
+  <li><b>Repeat</b><span><em>Automations</em> and <em>Agentic Workflows</em> run jobs like this on a schedule or a trigger, for the whole team.</span></li>
+</ol>
+
+<h2>The announcements at a glance</h2>
+
+<div class="tiles">
+  <div><b>Copilot Fusion</b><span>Model routing and orchestration. Replaces the Auto option in the model picker.</span></div>
+  <div><b>Copilot app + Projects</b><span>Desktop home for agent work. Projects coordinate agents across many repos.</span></div>
+  <div><b>Cloud experience</b><span>Cloud sessions in sandboxes, which you can pick up from any Copilot client.</span></div>
+  <div><b>Shared harness</b><span>One agent harness for VS Code, CLI, the app and JetBrains, built on the Microsoft Copilot SDK.</span></div>
+  <div><b>Agent Merge</b><span>"Watch and fix" in the PR merge box. Fixes CI failures and conflicts.</span></div>
+  <div><b>Code review Max</b><span>Several review agents on different models, reconciled into one review.</span></div>
+  <div><b>Shared Automations</b><span>Team-owned Copilot automations that belong to the repo, not a person.</span></div>
+  <div><b>Agentic Workflows</b><span>Markdown workflows compiled to GitHub Actions. Now generally available.</span></div>
+  <div><b>Copilot in Enterprise</b><span>GitHub Enterprise licences now include Copilot access, paid for by usage.</span></div>
+</div>
+
+<h2>What's GA and what's preview</h2>
+
+<p>Status matters more than usual this year, because many features launched in different states on the same day. This is the picture at the time of writing (early November 2026). Previews change quickly, so check the GitHub changelog before you rely on any of it.</p>
+
+<table>
+  <thead><tr><th>Feature</th><th>Status</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Copilot Fusion</td><td>Generally available</td><td>All Copilot plans, in VS Code, the Copilot app, Copilot CLI and JetBrains</td></tr>
+    <tr><td>Cloud experience and cloud sandboxes</td><td>Generally available</td><td>Paid plans. Sandbox billing starts in November 2026</td></tr>
+    <tr><td>Agentic Workflows</td><td>Generally available</td><td>GitHub Free, Team and Enterprise</td></tr>
+    <tr><td>Copilot code review approvals</td><td>Generally available</td><td>Previously a public preview, from September</td></tr>
+    <tr><td>Agent Merge on github.com PRs</td><td>Available</td><td>Paid Copilot plans, subject to org and enterprise policy</td></tr>
+    <tr><td>Code review Max</td><td>Public preview</td><td>A third effort level alongside Lite and Balanced</td></tr>
+    <tr><td>Projects in the Copilot app</td><td>Public preview</td><td>No plan-specific pricing announced</td></tr>
+    <tr><td>Computer use</td><td>Preview</td><td>macOS and Windows, off by default. Sources differ on preview versus experimental</td></tr>
+    <tr><td>Copilot connectors</td><td>Preview</td><td>Slack, Notion, Microsoft Learn and others, with no MCP server to run</td></tr>
+    <tr><td>Shared Automations</td><td>Rolling out</td><td>Gradual rollout, no per-account dates</td></tr>
+  </tbody>
+</table>
+
+<p>The Copilot app itself launched in technical preview in May 2026 and, as far as public sources show, is still described that way. The new features inside it have their own statuses.</p>
+
+<h2>Three themes to listen for</h2>
+
+<h3>1. Stop picking models, start picking effort</h3>
+
+<p>Until now you chose a model from a list. With Fusion, you choose how hard Copilot should try (Standard, High or Max) and it decides which models do the work. Code review gained the same idea: Lite, Balanced and Max are effort levels, not model names. Expect this pattern to spread.</p>
+
+<h3>2. Agents that keep going without you</h3>
+
+<p>Sessions now run in the cloud or in a background process, and you can follow the same live session in VS Code, the Copilot app, GitHub Mobile, github.com or Copilot CLI. Agent Merge and Automations go further and act on events, a red CI run or a schedule, with nobody prompting them.</p>
+
+<h3>3. Copilot becomes something your organisation runs</h3>
+
+<p>Shared Automations belong to the repository, so they survive someone leaving. GitHub Enterprise now includes Copilot access. Admins get policies to cap review effort, restrict Fusion's models and switch off computer use. These are features for platform teams, not just individual developers.</p>
+
+<div class="callout warn"><span class="label">Read the coverage carefully</span>
+A lot of the Universe write-ups are third-party summaries, and they disagree on details such as which features are GA. Where this topic gives a status, it comes from GitHub's own changelog wording where available. Where sources conflicted, the lesson says so.
+</div>
+
+<h2>Why it matters for you</h2>
+
+<p>If you're a developer, the practical change is that more of the boring parts of a pull request (rerunning flaky CI, fixing a lint failure, resolving a conflict after someone else merges) can now be handed off. If you lead a team, the change is cost and control. Nearly every new capability spends AI credits, and several run agents that act without a human in the loop. Knowing which policies exist, and which features are on by default, is now part of running Copilot well.</p>
+
+<p>The lessons that follow go through the loop in order: Fusion, then the app and the harness, then the pull request features, then automation, and finally a hands-on plan for rolling it all out.</p>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Universe 2026 (28–29 October) repositioned Copilot as a delivery system covering plan, build, review and merge.</li>
+  <li>Fusion, cloud sandboxes, Agentic Workflows and code review approvals are generally available. Projects, code review Max, computer use and connectors are in preview.</li>
+  <li>The recurring theme is choosing <em>effort</em> rather than a model, both in Fusion and in code review.</li>
+  <li>Sessions now outlive your editor window and follow you across clients, and some agents run on events with no prompt at all.</li>
+  <li>Many of the new controls are aimed at admins: shared ownership, model policies, effort caps and Enterprise-included access.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Your team wants to adopt only features that are generally available today. Which of these qualifies?",
+    "options": ["Projects in the Copilot app", "Copilot code review Max", "Copilot Fusion", "Computer use"],
+    "answer": 2,
+    "explain": "Fusion went GA on all Copilot plans at Universe. Projects, code review Max and computer use all launched in preview."
+  },
+  {
+    "q": "In the Universe 2026 picture of the delivery loop, which feature owns getting a red pull request to green and merged?",
+    "options": ["Copilot Fusion", "Agent Merge", "Copilot connectors", "Shared Automations"],
+    "answer": 1,
+    "explain": "Agent Merge watches a PR and fixes failing Actions workflows and merge conflicts. Fusion picks models, and connectors bring in context."
+  },
+  {
+    "q": "A colleague says 'Fusion means I finally get to choose exactly which model runs my task.' What's wrong with that?",
+    "options": [
+      "Fusion only works in JetBrains",
+      "Fusion has you choose an effort level, and Copilot decides which models to use",
+      "Fusion always uses a single fixed model",
+      "Fusion is only for code review"
+    ],
+    "answer": 1,
+    "explain": "The point of Fusion is that you stop picking models. You pick Standard, High or Max, and it routes the work."
+  },
+  {
+    "q": "Why do Shared Automations matter more to a team lead than personal automations did?",
+    "options": [
+      "They run faster",
+      "They belong to the repository, so they keep running when the person who created them leaves",
+      "They don't use AI credits",
+      "They only run locally"
+    ],
+    "answer": 1,
+    "explain": "Shared automations are owned by the repo, not an individual, which is what makes them safe to depend on as a team."
+  },
+  {
+    "q": "You read a recap claiming the Copilot app is now GA. Based on this lesson, what should you do?",
+    "options": [
+      "Trust it, since all Universe features were GA",
+      "Check the GitHub changelog, because public sources still describe the app as a technical preview and recaps disagree on statuses",
+      "Assume it's been discontinued",
+      "Ask Copilot Fusion"
+    ],
+    "answer": 1,
+    "explain": "Statuses varied widely across write-ups. The app launched in technical preview in May and no source found confirms GA, so go to the primary source."
+  }
+]
+</script>

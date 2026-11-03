@@ -1,0 +1,145 @@
+<p>Imagine you kick off an agent in VS Code to upgrade a test framework across a large repo. It'll take forty minutes. You close the laptop to catch the train, and the agent dies with the editor window. Or it keeps running in the cloud, but the only way to check on it is a different web page that shows the session differently from your editor, with a different set of custom instructions loaded.</p>
+
+<p>That fragmentation was the problem behind a cluster of Universe 2026 announcements. Agents now run on <strong>one shared harness</strong> wherever they start, sessions can <strong>outlive the window</strong> that started them, and you can <strong>follow the same live session</strong> from any Copilot client. On top of that, the Copilot app gained <strong>Projects</strong>, which coordinate many agents across many repositories.</p>
+
+<div class="callout key"><span class="label">Key idea</span>
+A session is no longer tied to the client you started it in. One harness runs it, a background host or the cloud keeps it alive, and any client can attach to it.
+</div>
+
+<h2>The harness: one agent brain everywhere</h2>
+
+<p>The <strong>harness</strong> is the agent loop itself: the code that takes your prompt, calls the model, runs tools, edits files and decides when it's done. Until now, VS Code's local agent and Copilot CLI had separate harnesses, which is why a custom agent or instruction file could behave slightly differently in each.</p>
+
+<p>At Universe, GitHub combined them. The <strong>Copilot harness</strong> is now the default for new sessions in VS Code's editor and its Agents window, and JetBrains IDEs are moving to it as their default too. Because it's the same harness, your agent customisations carry across VS Code, Copilot CLI and the Copilot app.</p>
+
+<p>The harness is built on the <strong>Microsoft Copilot SDK</strong>, which is the new name for the GitHub Copilot SDK. The SDK went GA in June 2026 in six languages (Node.js/TypeScript, Python, Go, .NET, Rust and Java). The rename reflects that it's becoming the shared agent foundation behind both Microsoft and GitHub products. It's happening in phases: the repo is moving to the Microsoft organisation, but <strong>package names and namespaces haven't changed yet</strong>, so, for example, the npm package is still <code>@github/copilot-sdk</code> for now.</p>
+
+<div class="callout warn"><span class="label">Gotcha</span>
+Don't rush to rename imports in code that uses the SDK. GitHub says package names and namespaces stay the same during the transition, and some docs will keep saying "GitHub Copilot SDK" for a while. Watch the changelog for the actual package change.
+</div>
+
+<h2>Agent Host: sessions that survive the window</h2>
+
+<p>In VS Code, the new <strong>Agent Host</strong> runs agent sessions in a separate process from the editor window. Close the window, or the folder, and the session keeps going. Reopen VS Code and you're back in it.</p>
+
+<p>It also works on another machine. Start the host on, say, a beefy dev box, and you can drive its sessions remotely, including from your phone:</p>
+
+<pre><code>code agent host --github-environment</code></pre>
+
+<p>The catch is obvious but easy to forget: the remote machine, and the Agent Host on it, have to stay running. Shut the lid on the dev box and the session stops.</p>
+
+<p>GitHub also published the <strong>Agent Host Protocol 1.0</strong>, an open protocol that lets third-party clients join live sessions. Client libraries are listed for TypeScript, Rust, Go, Kotlin and Swift. If you've wanted to build your own dashboard or bot that watches agent sessions, this is the supported route.</p>
+
+<h2>The cloud: sandboxes and session continuity</h2>
+
+<p>For work you don't want on any machine of yours, cloud sessions run in <strong>cloud sandboxes</strong>, and every cloud session now runs in a sandbox by default. The new connected cloud experience and cloud sandboxes are <strong>generally available on paid Copilot plans</strong>. Billing for sandbox usage starts in November 2026, so expect a new line on the bill.</p>
+
+<p>The headline feature is <strong>session continuity</strong>. You can start a cloud session in VS Code's Agents window and pick it up in the Copilot app, GitHub Mobile, github.com or Copilot CLI. All of them show the same live session and stay in sync. GitHub also lists Slack and Microsoft Teams among the surfaces of the cloud experience.</p>
+
+<ol class="flow">
+  <li><b>Start</b><span>At your desk, in VS Code's Agents window: "upgrade the test framework".</span></li>
+  <li><b>Leave</b><span>The session runs in a cloud sandbox. Your laptop can sleep.</span></li>
+  <li><b>Check in</b><span>On the train, open GitHub Mobile, see that it's stuck on a config question and answer it.</span></li>
+  <li><b>Finish</b><span>Back home, open the Copilot app or the CLI, attached to the same session, and review the diff.</span></li>
+</ol>
+
+<h2>The Copilot app and Projects</h2>
+
+<p>The <strong>GitHub Copilot app</strong> is a desktop app (Windows, macOS and Linux) that acts as a home for agent work. It launched in technical preview in May 2026 and was opened to all Copilot plans in June. Each session gets its own git worktree, branch and task state, so several can run in parallel without treading on each other.</p>
+
+<p>The big Universe addition is <strong>Projects</strong>, in public preview. A project brings together everything a piece of work touches: multiple repositories, design mocks, Slack discussions, meeting notes and other context. You give it a goal, and Copilot coordinates agents to produce the deliverables, usually pull requests across several repos, while tracking progress centrally so you can see where each agent is. Projects can also cover work that isn't code at all, like a launch plan.</p>
+
+<p>Take "add rate limiting to the public API" from the first lesson. That touches the gateway repo, a shared middleware library and the docs site. A project lets one goal fan out to three agents and shows you all three in one place.</p>
+
+<div class="callout warn"><span class="label">Watch your reviewers</span>
+Analysts quoted in the launch coverage made a fair point: ten parallel agents can mean ten pull requests that someone has to review, test and merge. Projects move the bottleneck from writing code to reviewing it, which is why the next lesson's review and merge features matter.
+</div>
+
+<h2>Connectors and computer use</h2>
+
+<p>Two more previews round this out.</p>
+
+<ul>
+  <li><strong>Copilot connectors</strong> (preview) pull context from services such as Slack, Notion and Microsoft Learn into agent sessions <em>without</em> you installing or running an MCP server. GitHub also lists built-in connectors for Sentry, Linear and Cloudflare, among others.</li>
+  <li><strong>Computer use</strong> lets Copilot read app content, click controls, type and move between desktop apps on macOS and Windows, in the Copilot app and Copilot CLI. It's <strong>off by default</strong>, and organisations can disable it by policy. Sources disagree on whether it's "public preview" or "experimental", and VS Code describes it as experimental in the editor.</li>
+</ul>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>VS Code, Copilot CLI, the Copilot app and (soon by default) JetBrains share one Copilot harness, so customisations behave the same everywhere.</li>
+  <li>The harness is built on the Microsoft Copilot SDK, the renamed GitHub Copilot SDK. Package names haven't changed yet.</li>
+  <li>VS Code's Agent Host keeps sessions alive after the window closes and can run on a remote machine, as long as that machine stays on. Agent Host Protocol 1.0 lets other clients join sessions.</li>
+  <li>Cloud sessions run in sandboxes (GA on paid plans, billed from November 2026), and one live session can be followed from VS Code, the app, Mobile, github.com or the CLI.</li>
+  <li>Projects (public preview) coordinate agents across repos and context sources. Connectors and computer use are previews, and computer use is off by default.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "You start an agent on your remote dev box with the Agent Host, then shut that machine down to save power. What happens to the session?",
+    "options": [
+      "It migrates to a cloud sandbox automatically",
+      "It stops, because the remote machine and its Agent Host must stay running",
+      "It continues on your phone",
+      "It pauses and resumes in JetBrains"
+    ],
+    "answer": 1,
+    "explain": "Agent Host sessions run on the machine hosting them. Only cloud sessions keep running independently of your hardware."
+  },
+  {
+    "q": "A custom agent you wrote behaves differently in VS Code and in Copilot CLI. Which Universe change should reduce this?",
+    "options": [
+      "Copilot Fusion",
+      "The unified Copilot harness used by default across VS Code, the CLI and the app",
+      "Shared Automations",
+      "Code review Max"
+    ],
+    "answer": 1,
+    "explain": "Separate harnesses were the cause. With one shared harness, customisations carry across clients."
+  },
+  {
+    "q": "Your codebase imports @github/copilot-sdk. After hearing about the rename, what should you do today?",
+    "options": [
+      "Switch every import to a Microsoft package name immediately",
+      "Nothing yet. Package names and namespaces are unchanged during the phased transition",
+      "Remove the SDK, as it's deprecated",
+      "Pin to a version from before June 2026"
+    ],
+    "answer": 1,
+    "explain": "GitHub says the rename is phased and package names haven't changed yet. Wait for the changelog to announce the package change."
+  },
+  {
+    "q": "You want an agent to pull context from your team's Notion pages without running any extra infrastructure. What fits best?",
+    "options": [
+      "Write and host a custom MCP server",
+      "Copilot connectors",
+      "Computer use",
+      "Agent Host Protocol"
+    ],
+    "answer": 1,
+    "explain": "Connectors bring in context from services such as Slack and Notion without you installing or managing an MCP server. They're in preview."
+  },
+  {
+    "q": "A Copilot Project spins up agents in five repositories at once. What's the main new risk for the team?",
+    "options": [
+      "The agents share one git branch and overwrite each other",
+      "Five pull requests arrive that still need reviewing, testing and merging",
+      "Projects can't access more than one repo",
+      "Projects disable CI"
+    ],
+    "answer": 1,
+    "explain": "Each session gets its own worktree and branch, so they don't clash. The bottleneck moves to review and merge."
+  },
+  {
+    "q": "Which statement about computer use is accurate?",
+    "options": [
+      "It's on by default for all paid plans",
+      "It runs only in cloud sandboxes on Linux",
+      "It's off by default, available on macOS and Windows, and can be disabled by organisation policy",
+      "It's generally available in VS Code"
+    ],
+    "answer": 2,
+    "explain": "Computer use is a preview feature that's disabled by default and can be turned off by policy. VS Code describes it as experimental."
+  }
+]
+</script>

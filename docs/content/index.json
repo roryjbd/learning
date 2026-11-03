@@ -48,6 +48,55 @@
           "summary": "Put it all together: an agent that clones a repo, fixes an issue, runs tests and opens a PR."
         }
       ]
+    },
+    {
+      "id": "copilot-universe-2026",
+      "title": "GitHub Copilot: Universe 2026",
+      "description": "What's new in GitHub Copilot from GitHub Universe 2026: Fusion, the Copilot app and Projects, Agent Merge, code review Max, Automations and Enterprise access.",
+      "lessons": [
+        {
+          "id": "big-picture",
+          "file": "01-big-picture.html",
+          "title": "The big picture",
+          "minutes": 9,
+          "summary": "Copilot as a delivery system: the map of announcements and what's GA versus preview."
+        },
+        {
+          "id": "fusion",
+          "file": "02-fusion.html",
+          "title": "Copilot Fusion: effort, not models",
+          "minutes": 9,
+          "summary": "Model routing and orchestration: effort levels, Single, Cascade and Critique, and what it costs."
+        },
+        {
+          "id": "app-and-harness",
+          "file": "03-app-and-harness.html",
+          "title": "The app, Projects and the shared harness",
+          "minutes": 9,
+          "summary": "One harness everywhere, Agent Host, cloud sandboxes, session continuity and multi-repo Projects."
+        },
+        {
+          "id": "pull-requests",
+          "file": "04-pull-requests.html",
+          "title": "Agent Merge and code review Max",
+          "minutes": 8,
+          "summary": "Watch and fix for CI and conflicts, multi-agent reviews, approvals and a sceptical look at ReviewBench."
+        },
+        {
+          "id": "automations",
+          "file": "05-automations-and-workflows.html",
+          "title": "Automations and Agentic Workflows",
+          "minutes": 8,
+          "summary": "Team-owned Copilot automations, and Markdown agent jobs compiled to GitHub Actions."
+        },
+        {
+          "id": "rollout",
+          "file": "06-rollout-plan.html",
+          "title": "Build it: a team rollout plan",
+          "minutes": 9,
+          "summary": "Enterprise-included access, AI credits, policies and a week-by-week plan for switching it all on."
+        }
+      ]
     }
   ]
 }

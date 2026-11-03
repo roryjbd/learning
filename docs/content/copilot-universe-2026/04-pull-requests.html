@@ -1,0 +1,162 @@
+<p>Writing the code is often the quick part. Then the pull request sits there. CI fails on a lint rule. You fix it, and a flaky integration test fails. You rerun it, and meanwhile someone merges to <code>main</code> and you've got a conflict in the lockfile. Then you wait a day for a reviewer, who leaves three comments about naming.</p>
+
+<p>With agents producing more pull requests than ever (see Projects in the last lesson), that tail end becomes the bottleneck. Universe 2026 aimed two features squarely at it: <strong>Agent Merge</strong>, which gets a PR from red to merged, and upgrades to <strong>Copilot code review</strong>, which now has a deeper multi-agent level and can approve pull requests.</p>
+
+<div class="callout key"><span class="label">Key idea</span>
+Code review decides <em>whether</em> a change is good. Agent Merge handles <em>getting it in</em>. Together with auto-merge and branch protection, they can carry a PR from "ready" to "merged" with a human only setting the rules.
+</div>
+
+<h2>Agent Merge: watch and fix</h2>
+
+<p>Agent Merge watches a pull request and fixes the blockers that stop it merging. GitHub names two kinds of blocker: <strong>failing GitHub Actions workflows</strong> and <strong>merge conflicts</strong>. It was already available in the Copilot app and VS Code. At Universe it arrived directly on pull requests on github.com.</p>
+
+<ol class="flow">
+  <li><b>Turn it on</b><span>In the PR's merge box, choose <em>Watch and fix</em>.</span></li>
+  <li><b>Pick what it handles</b><span>CI failures, merge conflicts or both.</span></li>
+  <li><b>A blocker appears</b><span>A workflow fails, or <code>main</code> moves and causes a conflict.</span></li>
+  <li><b>Copilot fixes it</b><span>It starts work in a cloud development environment and pushes a fix to the branch.</span></li>
+  <li><b>Merge</b><span>Combined with auto-merge, GitHub merges once every requirement is met.</span></li>
+</ol>
+
+<p>You can also turn it on by default for all your pull requests in your Copilot settings. Agent Merge in the cloud is available on <strong>paid Copilot plans</strong>, subject to your organisation's and enterprise's policies.</p>
+
+<div class="callout warn"><span class="label">Gotcha</span>
+"Fix the failing check" can be done badly: deleting the test, loosening an assertion, adding a skip. Agent Merge pushes commits to your branch, so those commits deserve the same scrutiny as anything else. Keep required reviews and CODEOWNERS on the paths that matter, and look at what it changed, not just that CI went green.
+</div>
+
+<h2>Copilot code review: effort levels</h2>
+
+<p>Copilot code review has had <strong>effort levels</strong> since August 2026, and they work like Fusion's: you choose how much work to spend, not which model.</p>
+
+<table>
+  <thead><tr><th>Level</th><th>How it reviews</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Lite</strong></td><td>Since September, an ensemble of agents rather than one agent alone</td><td>GA</td></tr>
+    <tr><td><strong>Balanced</strong></td><td>The default for new and existing repos and organisations since 2 October</td><td>GA</td></tr>
+    <tr><td><strong>Max</strong></td><td>Several independent review agents on models from different providers, reconciled by an aggregation agent</td><td>Public preview (new at Universe)</td></tr>
+  </tbody>
+</table>
+
+<h3>How Max works</h3>
+
+<p>Max is the multi-agent idea applied to review. Several review agents look at the pull request independently, deliberately using models from <em>different providers</em> so they don't all share the same blind spots. An <strong>aggregation agent</strong> then reconciles their findings, resolves disagreements and double-checks accuracy before producing one combined review. You get one set of comments, not five overlapping ones.</p>
+
+<p>GitHub hasn't published how many agents a Max review uses, which models are involved or how many credits a typical Max review costs, so try it on a few real PRs before making it a default.</p>
+
+<h3>Admins can cap effort</h3>
+
+<p>Admins can set a <strong>maximum effort level</strong> at the enterprise, organisation or repository level. Any level above the cap isn't available. That's the lever for stopping every PR in a busy monorepo running Max reviews.</p>
+
+<h2>Copilot approvals</h2>
+
+<p>Copilot code review can now <strong>approve</strong> pull requests, not just comment on them. This launched as a public preview in September and became <strong>generally available</strong> at Universe. Copilot's approval decision builds on the findings from its own review.</p>
+
+<p>Two details are worth knowing:</p>
+<ul>
+  <li>Approvals are <strong>off by default</strong>. Someone has to choose to turn them on.</li>
+  <li>If new commits are pushed after Copilot approves, its approval is <strong>dismissed</strong>. That includes commits Agent Merge pushes, so a fix-up commit means a fresh review.</li>
+</ul>
+
+<div class="callout"><span class="label">Should a Copilot approval count?</span>
+This is a policy decision, not a technical one. A common middle ground is to let Copilot's approval satisfy review rules on low-risk paths (docs, tests, generated code) while requiring a human CODEOWNER on sensitive ones (auth, billing, infrastructure).
+</div>
+
+<h2>A note on ReviewBench</h2>
+
+<p>GitHub's Universe announcement said code review Max "posted the highest F1 score on ReviewBench for high-severity issues". It's worth understanding what that means and what it doesn't.</p>
+
+<p><strong>ReviewBench</strong> is a benchmark GitHub published for AI code review. It uses 219 public pull requests from 187 public repositories across 19 languages. On GitHub's leaderboard, Copilot code review at Balanced led with a 40.1% grounded F1 score. Independent coverage raised two caveats. First, Copilot itself supplied 1,185 of the 2,623 true-positive findings in the answer key, which risks favouring Copilot. Second, on a separate independent benchmark, Copilot code review ranked fifth as of early October.</p>
+
+<p>None of that means the reviews are bad. It means a vendor's own benchmark is a starting point, and your own pull requests are the real test.</p>
+
+<h2>Putting it together</h2>
+
+<p>Here's what a well-guarded flow might look like for a team that's adopting both features:</p>
+
+<ol class="flow">
+  <li><b>Agent opens a PR</b><span>From a Project, an Automation or a person.</span></li>
+  <li><b>Code review runs</b><span>Balanced by default. Max on labelled or high-risk PRs, within the admin cap.</span></li>
+  <li><b>Agent Merge watches</b><span>Fixes CI failures and conflicts, and each push dismisses the earlier approval.</span></li>
+  <li><b>Rules decide</b><span>Branch protection requires Copilot's approval on low-risk paths and a human CODEOWNER elsewhere.</span></li>
+  <li><b>Auto-merge</b><span>Merges once every requirement is met.</span></li>
+</ol>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Agent Merge ("Watch and fix" in the merge box) fixes failing Actions workflows and merge conflicts in a cloud environment. It's on paid plans and can be combined with auto-merge.</li>
+  <li>Code review effort levels are Lite, Balanced (the default since October) and Max, a public-preview multi-agent review using models from different providers plus an aggregation agent.</li>
+  <li>Admins can cap the maximum review effort at the enterprise, organisation or repository level.</li>
+  <li>Copilot approvals are GA but off by default, and a new commit dismisses Copilot's approval.</li>
+  <li>Treat ReviewBench as a vendor benchmark with known caveats. Judge review quality on your own PRs, and keep human owners on sensitive paths.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Copilot approves your PR. Agent Merge then pushes a commit to fix a merge conflict. What happens to the approval?",
+    "options": [
+      "It stays, because Agent Merge is part of Copilot",
+      "It's dismissed, because new commits were pushed after the approval",
+      "It's upgraded to a Max review",
+      "The PR merges immediately"
+    ],
+    "answer": 1,
+    "explain": "Copilot's approval is dismissed whenever new commits are pushed after it approved, whoever pushes them."
+  },
+  {
+    "q": "Your monorepo's AI credit spend spikes because developers set every review to Max. What's the most direct fix?",
+    "options": [
+      "Disable Copilot code review",
+      "Set a maximum review effort level at the organisation or repository level",
+      "Switch Fusion to Standard",
+      "Turn off Agent Merge"
+    ],
+    "answer": 1,
+    "explain": "Admins can cap review effort, and levels above the cap aren't available. Fusion settings don't control code review."
+  },
+  {
+    "q": "Which of these is Agent Merge designed to handle?",
+    "options": [
+      "Writing the feature from an issue",
+      "Failing GitHub Actions workflows and merge conflicts on an open PR",
+      "Approving its own PRs",
+      "Choosing the model for code review"
+    ],
+    "answer": 1,
+    "explain": "Agent Merge watches an existing PR and clears those two kinds of blocker. Approvals come from Copilot code review."
+  },
+  {
+    "q": "What makes a Max review different from running Balanced several times?",
+    "options": [
+      "Max uses one larger model",
+      "Max runs independent agents on models from different providers, then an aggregation agent reconciles and checks their findings",
+      "Max only reviews tests",
+      "Max skips the aggregation step for speed"
+    ],
+    "answer": 1,
+    "explain": "Diversity across providers plus a reconciling aggregator is the point. Repeating one configuration tends to repeat the same blind spots."
+  },
+  {
+    "q": "Agent Merge turns a red CI run green by adding a skip to a failing test. Which safeguard catches this?",
+    "options": [
+      "Copilot Fusion's Critique pattern",
+      "Required human review or CODEOWNERS on those paths, plus reading what Agent Merge changed",
+      "Turning on Copilot approvals",
+      "The 30% Fusion discount"
+    ],
+    "answer": 1,
+    "explain": "Agent Merge pushes real commits. Human ownership of sensitive paths is the deterministic check that a green build was earned."
+  },
+  {
+    "q": "A vendor slide says Copilot topped ReviewBench. Which caveat from this lesson is most relevant?",
+    "options": [
+      "ReviewBench only covers one language",
+      "Copilot supplied a large share of the answer key's true positives, and an independent benchmark ranked it lower",
+      "ReviewBench uses private repositories",
+      "ReviewBench doesn't measure F1"
+    ],
+    "answer": 1,
+    "explain": "Copilot contributed 1,185 of 2,623 true positives in the answer key, and it ranked fifth on an independent benchmark in early October."
+  }
+]
+</script>

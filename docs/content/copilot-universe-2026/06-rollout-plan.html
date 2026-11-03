@@ -1,0 +1,168 @@
+<p>You've now seen every piece: Fusion picks the models, the shared harness runs agents anywhere, Projects coordinate them, code review and Agent Merge close out the pull requests, and Automations and Agentic Workflows run jobs on their own. The question a team actually faces on Monday morning is different: <em>what do we switch on, for whom, and what will it cost?</em></p>
+
+<p>This capstone works through that as a concrete plan for a fictional company. Along the way it covers the last big Universe announcement, which is about money: <strong>GitHub Enterprise now includes access to Copilot</strong>.</p>
+
+<div class="callout key"><span class="label">Key idea</span>
+Nearly every new Copilot capability spends AI credits, and several act without a human prompt. A good rollout sets budgets and policies <em>first</em>, then turns features on in order of risk.
+</div>
+
+<h2>The scenario</h2>
+
+<p>Acme has 200 engineers on GitHub Enterprise Cloud and about 40 contractors who don't have Enterprise licences. They run a monorepo plus 30 service repos, CI on GitHub Actions with some self-hosted runners, and a security team that wants a human sign-off on anything touching auth or payments. Today they don't pay for Copilot at all.</p>
+
+<h2>Step 1: understand the bill</h2>
+
+<p>Since 1 June 2026, Copilot has billed on <strong>AI credits</strong>, where one credit is worth $0.01. Code completions and next-edit suggestions don't consume credits on paid plans. Chat, Copilot CLI, the cloud agent, code review and third-party coding agents do. Agentic code review on GitHub-hosted runners also uses Actions minutes, and cloud sandbox usage is billed from November 2026.</p>
+
+<h3>The new Enterprise option</h3>
+
+<p>At Universe, GitHub announced that GitHub Enterprise now includes access to Copilot. As reported across the launch coverage:</p>
+
+<table>
+  <thead><tr><th></th><th>Enterprise-included access</th><th>Copilot Business / Enterprise seats</th></tr></thead>
+  <tbody>
+    <tr><td>Seat price</td><td><strong>$0</strong> for users with a GitHub Enterprise Cloud licence</td><td>$19 (Business) or $39 (Enterprise) per user per month</td></tr>
+    <tr><td>Included credits</td><td><strong>None</strong>. Usage is billed against the enterprise budget from the first request</td><td>A monthly allowance per seat, reported as 1,900 (Business) and 3,900 (Enterprise)</td></tr>
+    <tr><td>When the budget runs out</td><td>Completions and next-edit suggestions keep working. Chat, code review and cloud agent need budget</td><td>Depends on your budget settings</td></tr>
+    <tr><td>Users without an Enterprise licence</td><td>Copilot Standalone at $10 per user per month</td><td>Normal seats</td></tr>
+  </tbody>
+</table>
+
+<p>Some important rules: developers don't get access automatically, because enterprise owners must assign it. You <strong>can't combine</strong> this access model with Copilot Business or Enterprise seats in the same enterprise, though you can mix Enterprise-licensed users with Standalone users. At launch it's available through GitHub's sales and account teams, with self-serve rolling out in stages.</p>
+
+<div class="callout warn"><span class="label">Gotcha</span>
+"$0 seat" isn't "free". With no included credits, a heavy agent user can easily cost more than a $39 seat would have. Enterprise-included access tends to save money when many people use Copilot lightly, and costs more when a few people use it heavily. Model your own usage before you switch.
+</div>
+
+<p>For Acme, which has no existing Copilot seats, Enterprise-included access for the 200 engineers plus Standalone for the 40 contractors is the natural start. They set an enterprise <strong>budget</strong> before assigning anyone.</p>
+
+<h2>Step 2: set policies before features</h2>
+
+<p>Here are the controls from this topic, gathered in one place:</p>
+
+<div class="tiles">
+  <div><b>Model policies</b><span>Choose which models are allowed. Fusion only routes to allowed models.</span></div>
+  <div><b>Fusion default effort</b><span>Set Standard as the default, so High and Max are a deliberate choice.</span></div>
+  <div><b>Review effort cap</b><span>Cap code review at Balanced org-wide, and allow Max on chosen repos.</span></div>
+  <div><b>Computer use</b><span>Off by default. Keep it off by policy until you've assessed it.</span></div>
+  <div><b>Cloud agent billing policy</b><span>"Allow use of Copilot cloud agent billed to the organization", needed for shared automations.</span></div>
+  <div><b>Branch protection</b><span>Not a Copilot setting, but the one that decides what Copilot's approval is worth.</span></div>
+</div>
+
+<p>Acme's security team allows models from two providers, which gives Fusion's Cascade and Critique patterns and code review Max's multi-provider design something to work with, and disables computer use for now.</p>
+
+<h2>Step 3: turn things on in order of risk</h2>
+
+<ol class="flow">
+  <li><b>Week 1: assistance</b><span>Completions, chat and Fusion at Standard in VS Code and JetBrains. Low risk, and it shows the baseline credit burn.</span></li>
+  <li><b>Week 2: review</b><span>Copilot code review at Balanced on all repos, comments only. Compare its findings with human reviewers.</span></li>
+  <li><b>Week 3: approvals and Agent Merge</b><span>Copilot approvals count only on docs and test paths. Agent Merge is opt-in per PR via Watch and fix.</span></li>
+  <li><b>Week 4: automation</b><span>One Agentic Workflow for issue triage, with read-only permissions and the add-comment safe output, on self-hosted runners.</span></li>
+  <li><b>Later: previews</b><span>Pilot Projects and code review Max with one team, and treat their statuses as subject to change.</span></li>
+</ol>
+
+<p>The order matters. Each step relies on the one before: you can't judge whether Copilot's approvals are trustworthy until you've seen its reviews, and you shouldn't let agents open PRs at scale until review and merge are under control.</p>
+
+<h2>Step 4: wire the PR guardrails</h2>
+
+<p>For the payment and auth paths, Acme keeps a human in the loop:</p>
+
+<pre><code># .github/CODEOWNERS
+/services/payments/   @acme/payments-owners
+/services/auth/       @acme/security
+/docs/                @acme/docs</code></pre>
+
+<p>A few things to notice:</p>
+<ul>
+  <li>Branch protection requires CODEOWNER review, so a Copilot approval alone can't merge a payments change.</li>
+  <li>On <code>/docs/</code>, the team decides that Copilot's approval plus green CI is enough, and auto-merge does the rest.</li>
+  <li>Because any push dismisses Copilot's approval, an Agent Merge fix-up triggers a fresh review instead of slipping through.</li>
+</ul>
+
+<h2>Step 5: measure and adjust</h2>
+
+<p>After a month, Acme looks at three things: credit spend by feature (is code review or cloud agent the big line?), the review signal (what share of Copilot's comments did humans act on?) and the merge time for agent-authored PRs. If spend is dominated by a handful of Max sessions, they tighten the default effort. If reviews are useful, they consider Max on the payments repo, where a missed bug costs the most.</p>
+
+<div class="callout"><span class="label">Tip</span>
+Statuses shift fast after a conference. Put a reminder in the calendar to recheck the GitHub changelog in a month for Projects, code review Max, computer use and connectors, and update your policies when they leave preview.
+</div>
+
+<h2>Takeaways</h2>
+<ul>
+  <li>Copilot bills in AI credits ($0.01 each). Completions and next-edit suggestions are free on paid plans, and agentic features aren't.</li>
+  <li>GitHub Enterprise now includes Copilot access: $0 seats for Enterprise Cloud users, no included credits, and billing from the first request. Standalone is $10 a month for others. It can't be mixed with Business or Enterprise seats.</li>
+  <li>Set budgets and policies (models, default effort, review cap, computer use, cloud agent billing) before switching features on.</li>
+  <li>Roll out in order of risk: assistance, then review, then approvals and Agent Merge, then automation, then previews.</li>
+  <li>Branch protection and CODEOWNERS decide what Copilot's approval is worth. Keep humans on sensitive paths.</li>
+</ul>
+
+<script type="application/json" class="quiz">
+[
+  {
+    "q": "Acme's enterprise budget for Copilot runs out mid-month under Enterprise-included access. What still works?",
+    "options": [
+      "Everything, because seats are $0",
+      "Code completions and next-edit suggestions, while chat, code review and the cloud agent need budget",
+      "Only code review",
+      "Nothing at all"
+    ],
+    "answer": 1,
+    "explain": "With no included credits, usage-based features stop at the budget. Completions and next-edit suggestions keep working."
+  },
+  {
+    "q": "A company already has 500 Copilot Business seats and wants to move just one department to Enterprise-included access. What's the problem?",
+    "options": [
+      "Enterprise-included access needs at least 1,000 users",
+      "The new access model can't be combined with Business or Enterprise seats in the same enterprise",
+      "Business seats can't use Fusion",
+      "There's no problem"
+    ],
+    "answer": 1,
+    "explain": "You can mix Enterprise-licensed users with Standalone users, but not this access model with Business or Enterprise seats."
+  },
+  {
+    "q": "Which user is most likely to cost more under Enterprise-included access than with a $39 Copilot Enterprise seat?",
+    "options": [
+      "Someone who mostly uses completions",
+      "A heavy user who runs many cloud agent sessions and Max-effort tasks every day",
+      "Someone who never opens Copilot",
+      "A contractor on Standalone"
+    ],
+    "answer": 1,
+    "explain": "There are no included credits, so heavy agentic usage is all billed. Completions-only users cost little."
+  },
+  {
+    "q": "Why does Acme roll out code review in comments-only mode before letting Copilot approvals count?",
+    "options": [
+      "Approvals aren't GA",
+      "You need evidence that Copilot's reviews are good before letting its approval satisfy branch protection",
+      "Comments are cheaper than approvals",
+      "Agent Merge needs it"
+    ],
+    "answer": 1,
+    "explain": "Approvals build on the review's findings. Judge the reviews on real PRs first, then decide where an approval should count."
+  },
+  {
+    "q": "Acme allows only one model provider. Which features lose the most value?",
+    "options": [
+      "Code completions",
+      "Fusion's Cascade and Critique patterns and code review Max, which rely on several models or providers",
+      "CODEOWNERS",
+      "Agentic Workflows' safe outputs"
+    ],
+    "answer": 1,
+    "explain": "Fusion only routes to allowed models, and Max deliberately uses models from different providers. Restricting choice blunts both."
+  },
+  {
+    "q": "Agent Merge pushes a fix to a payments PR that Copilot had already approved. With Acme's CODEOWNERS and branch protection, what happens?",
+    "options": [
+      "It auto-merges immediately",
+      "Copilot's approval is dismissed, and the PR still needs a payments CODEOWNER's review before it can merge",
+      "Agent Merge approves it",
+      "The PR is closed"
+    ],
+    "answer": 1,
+    "explain": "New commits dismiss Copilot's approval, and branch protection requires a human CODEOWNER on payments paths whatever Copilot does."
+  }
+]
+</script>
