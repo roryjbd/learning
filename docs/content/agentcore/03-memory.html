@@ -1,4 +1,4 @@
-<p>Models are stateless. Every call starts from nothing, and the only "memory" an agent has is whatever you put back into the prompt. That's fine for one turn, but real agents need to remember two very different kinds of thing:</p>
+<p>Models are stateless. Each call starts with no memory, and an agent only knows what you put back into the prompt. Agents need to keep two different kinds of information:</p>
 
 <ul>
   <li><strong>What just happened</strong>: the last few messages in this conversation, the tool call that just failed, the file the user mentioned two turns ago.</li>
@@ -9,7 +9,7 @@
 
 <h2>The three IDs</h2>
 
-<p>Everything in Memory is organised by three identifiers. Get these straight and the rest falls into place.</p>
+<p>Memory organises everything by three identifiers.</p>
 
 <table>
   <thead><tr><th>ID</th><th>What it is</th><th>Example</th></tr></thead>
@@ -62,7 +62,7 @@ recent = mem.list_events(
 
 <h2>Long-term memory: strategies</h2>
 
-<p>Raw transcripts are a terrible long-term memory. They're huge, repetitive and mostly noise. Long-term memory works by <strong>extracting</strong> the useful parts. You attach one or more <strong>strategies</strong> to the memory resource, and AgentCore reads new conversational events <em>asynchronously</em> in the background and turns them into compact <strong>memory records</strong>.</p>
+<p>Raw transcripts are poor long-term memory: they're large, repetitive and mostly irrelevant. Long-term memory works by <strong>extracting</strong> the useful parts. You attach one or more <strong>strategies</strong> to the memory resource, and AgentCore reads new conversational events <em>asynchronously</em> in the background and turns them into compact <strong>memory records</strong>.</p>
 
 <table>
   <thead><tr><th>Strategy</th><th>Extracts</th><th>Example record</th></tr></thead>
@@ -76,7 +76,7 @@ recent = mem.list_events(
 
 <p>Extraction also <strong>consolidates</strong>: if a user says they've switched from Python to Go, the preference record is updated rather than a contradicting record being added next to it.</p>
 
-<p>If the built-ins don't fit your domain you have two escape hatches:</p>
+<p>If the built-in strategies don't fit your domain, there are two alternatives:</p>
 <ul>
   <li><strong>Custom strategies</strong> let you pick the model and override the extraction and consolidation prompts. For example, "only extract facts about the user's infrastructure".</li>
   <li><strong>Self-managed strategies</strong> hand the work to you. AgentCore notifies you via SNS when there's new data, and your own pipeline (say, a Lambda) does the extraction and writes records back.</li>
@@ -106,7 +106,7 @@ recent = mem.list_events(
   <thead><tr><th>API</th><th>Use it to</th></tr></thead>
   <tbody>
     <tr><td><code>RetrieveMemoryRecords</code></td><td>Semantic search: "find records relevant to this query". This is the one you call during a conversation.</td></tr>
-    <tr><td><code>ListMemoryRecords</code></td><td>Enumerate everything in a namespace, for a "here's what I remember about you" screen or an audit.</td></tr>
+    <tr><td><code>ListMemoryRecords</code></td><td>Enumerate everything in a namespace, for example a screen showing a user what the agent remembers about them, or an audit.</td></tr>
     <tr><td><code>GetMemoryRecord</code> / <code>DeleteMemoryRecord</code></td><td>Work on a single record, for example when a user asks you to forget something.</td></tr>
   </tbody>
 </table>
@@ -130,17 +130,17 @@ recent = mem.list_events(
   <li><b>Save the turn</b><span><code>CreateEvent</code> with the user message and the reply. Extraction runs later, in the background.</span></li>
 </ol>
 
-<p>You often don't write this yourself:</p>
+<p>Two options do this for you:</p>
 <ul>
   <li><strong>Strands Agents</strong> has an AgentCore Memory session manager that does the loading and saving for you.</li>
   <li>A <strong>Harness</strong> takes a <code>memory</code> setting (managed memory, your own memory ARN, or disabled) and an <code>actorId</code> per invocation, and wires up short- and long-term memory automatically.</li>
 </ul>
 
-<div class="callout"><span class="label">Gotcha</span>
+<div class="callout"><span class="label">Note</span>
 Extraction is <strong>asynchronous</strong>. A fact mentioned a moment ago is in short-term events immediately, but it may not be a retrievable long-term record yet. Don't write tests that create an event and instantly expect <code>RetrieveMemoryRecords</code> to find it.
 </div>
 
-<h2>Designing it well</h2>
+<h2>Design guidelines</h2>
 <ul>
   <li><strong>Memory sits on the hot path.</strong> Retrieval latency is paid on every turn, and sometimes on every reasoning step. Retrieve once per turn where you can, and keep <code>topK</code> small.</li>
   <li><strong>Different memories deserve different lifetimes.</strong> Expire raw events and session summaries first. Keep distilled facts and preferences much longer.</li>
@@ -191,7 +191,7 @@ Extraction is <strong>asynchronous</strong>. A fact mentioned a moment ago is in
       "To encrypt records with a per-user key"
     ],
     "answer": 2,
-    "explain": "Namespaces isolate users from each other and let you query just the slice of memory that's relevant to the current step."
+    "explain": "Namespaces isolate users from each other and let you query only the part of memory that's relevant to the current step."
   },
   {
     "q": "Your app lets the browser send actorId directly in the request body. What's the risk?",

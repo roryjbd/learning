@@ -1,10 +1,10 @@
-<p>When an agent opens a pull request, reads a calendar or posts to Slack, someone has to be accountable for it. Is the agent acting as <em>itself</em>, with its own service account? Or is it acting <em>on behalf of a specific user</em>, with only that user's permissions? Getting this wrong ranges from annoying (every user sees the same calendar) to dangerous (an agent with admin rights that any user can steer).</p>
+<p>When an agent opens a pull request, reads a calendar or posts to Slack, someone has to be accountable for it. Is the agent acting as <em>itself</em>, with its own service account? Or is it acting <em>on behalf of a specific user</em>, with only that user's permissions? Getting this wrong can mean every user sees the same calendar, or that any user can direct an agent that has admin rights.</p>
 
-<p><strong>AgentCore Identity</strong> is the part of AgentCore that answers "who is this agent, who is it acting for, and how does it get credentials?" without secrets ever passing through a prompt.</p>
+<p><strong>AgentCore Identity</strong> manages who an agent is, who it acts for and how it gets credentials, without secrets passing through a prompt.</p>
 
 <h2>Three separate auth problems</h2>
 
-<p>Most identity confusion comes from mixing up three distinct layers. They're configured independently, and a mistake in any of them shows up as the same unhelpful 401 or 403.</p>
+<p>Identity problems usually come from confusing three separate layers. Each is configured independently, and a mistake in any of them produces a similar 401 or 403 error.</p>
 
 <table>
   <thead><tr><th>Layer</th><th>Direction</th><th>Question it answers</th></tr></thead>
@@ -15,17 +15,17 @@
   </tbody>
 </table>
 
-<p>When something returns 403, the first step is always: <em>which of these three layers is failing?</em></p>
+<p>When something returns 403, first work out which of these three layers is failing.</p>
 
 <h2>Inbound: SigV4 or JWT</h2>
 
 <p>Runtimes, harnesses and gateways all accept one of two inbound methods:</p>
 <ul>
-  <li><strong>IAM SigV4</strong>: the caller signs the request with AWS credentials. Great for backend-to-backend calls inside AWS.</li>
+  <li><strong>IAM SigV4</strong>: the caller signs the request with AWS credentials. Suited to backend-to-backend calls inside AWS.</li>
   <li><strong>OAuth JWT</strong>: the caller presents a token from your identity provider (Cognito, Okta, Entra ID, Auth0 or any OIDC provider). You configure a discovery URL plus <code>allowedAudience</code> and/or <code>allowedClients</code>.</li>
 </ul>
 
-<div class="callout key"><span class="label">The important difference</span>
+<div class="callout key"><span class="label">Key point</span>
 <strong>Only the JWT path carries a per-user identity through to downstream tools.</strong> SigV4 tells AgentCore which <em>AWS principal</em> called, not which end user. If your agent needs to act on behalf of individual users (their GitHub, their Google Drive), use JWT inbound auth.
 </div>
 
@@ -94,23 +94,23 @@ async def list_my_repos(*, access_token: str):
 </ol>
 
 <h3>Session binding</h3>
-<p>Here's a subtle attack: a user starts the consent flow and accidentally pastes the authorization link into a team chat. Someone else clicks it and approves with <em>their</em> account. Now the first user's agent is holding someone else's token.</p>
-<p><strong>Session binding</strong> stops this. After consent, the browser returns to your callback with a session URI, and your app calls <code>CompleteResourceTokenAuth</code> with both that URI and the identity of the logged-in user. AgentCore only completes the exchange if it's the same user who started the flow. Authorization URLs also expire after 10 minutes.</p>
+<p>Consider this attack. A user starts the consent flow and accidentally pastes the authorization link into a team chat. Someone else clicks it and approves with <em>their</em> account. The first user's agent now holds someone else's token.</p>
+<p><strong>Session binding</strong> prevents this. After consent, the browser returns to your callback with a session URI, and your app calls <code>CompleteResourceTokenAuth</code> with both that URI and the identity of the logged-in user. AgentCore only completes the exchange if it's the same user who started the flow. Authorization URLs also expire after 10 minutes.</p>
 
 <h2>Keeping secrets out of the model</h2>
-<p>The thread running through all of this is that <strong>credentials never belong in the model's context</strong>. If a token is in the prompt, a prompt injection can ask the model to repeat it. With Identity:</p>
+<p>The principle behind all of this is that <strong>credentials must not be in the model's context</strong>. If a token is in the prompt, a prompt injection can ask the model to repeat it. With Identity:</p>
 <ul>
   <li>Tokens are injected into <em>code</em> (your tool function, or the gateway's outbound call), not text.</li>
   <li>API keys and client secrets live in the vault, not in environment variables or system prompts.</li>
   <li>Scopes limit the damage: ask for <code>repo</code> only if you need write access, and use a read-only scope if you don't.</li>
 </ul>
 
-<div class="callout warn"><span class="label">Trust boundary</span>
+<div class="callout warn"><span class="label">Security</span>
 Anyone who passes inbound auth on a Harness gets the whole session, including its shell and tools, and can send per-invocation overrides (model, skills, tools). If you put a Harness behind an app used by people you don't fully trust, validate their messages and <strong>strip or allowlist override fields</strong> in your own backend before calling <code>InvokeHarness</code>.
 </div>
 
 <h2>Prefer short-lived credentials</h2>
-<p>From best to worst: IAM roles (temporary, rotated automatically), then OAuth tokens (scoped, refreshable, revocable), then API keys (long-lived, all-or-nothing). Use API keys only when the target supports nothing better.</p>
+<p>In order of preference: IAM roles (temporary, rotated automatically), then OAuth tokens (scoped, refreshable, revocable), then API keys (long-lived, all-or-nothing). Use API keys only when the target supports nothing better.</p>
 
 <h2>Takeaways</h2>
 <ul>

@@ -3,7 +3,7 @@
 // cache straight away and refreshed in the background when there's signal
 // (stale-while-revalidate), so new lessons appear on the next open.
 
-const CACHE = 'study-v2';
+const CACHE = 'study-v3';
 const SHELL = [
   './',
   'index.html',

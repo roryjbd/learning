@@ -9,7 +9,7 @@
 3. Open it **once from the home screen icon** while still online. The home-screen app has its own storage, separate from Safari, and that first launch is when it downloads every lesson.
 4. After that it works offline. Progress and quiz scores are saved on the device.
 
-When you push new content, the app picks it up in the background the next time you open it with signal, and shows it on the open after that.
+When you push new content, the app checks for it whenever it's opened or brought to the foreground with signal, downloads it in the background, and updates the topic and home pages when the download finishes.
 
 ## Kindle / e-reader
 

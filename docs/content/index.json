@@ -10,62 +10,62 @@
           "file": "01-big-picture.html",
           "title": "The big picture",
           "minutes": 9,
-          "summary": "What AgentCore is, the services in the box, and Harness versus Runtime."
+          "summary": "What AgentCore is, its services, and when to use a Harness or Runtime."
         },
         {
           "id": "runtime",
           "file": "02-runtime.html",
           "title": "Runtime: hosting your agent",
-          "minutes": 11,
+          "minutes": 9,
           "summary": "MicroVM sessions, protocols, the container contract, lifecycle limits and what you pay for."
         },
         {
           "id": "memory",
           "file": "03-memory.html",
           "title": "Memory: short-term and long-term",
-          "minutes": 10,
-          "summary": "Events, actors and sessions, extraction strategies, namespaces, and retrieving what matters."
+          "minutes": 8,
+          "summary": "Events, actors and sessions, extraction strategies, namespaces and retrieval."
         },
         {
           "id": "gateway",
           "file": "04-gateway.html",
           "title": "Gateway and Policy: giving agents tools",
-          "minutes": 11,
-          "summary": "Turn APIs, Lambdas and MCP servers into one tool endpoint, then fence it in with Cedar."
+          "minutes": 8,
+          "summary": "Expose APIs, Lambdas and MCP servers as one tool endpoint, and restrict tool calls with Cedar."
         },
         {
           "id": "identity",
           "file": "05-identity.html",
           "title": "Identity: who is the agent acting for?",
-          "minutes": 10,
+          "minutes": 8,
           "summary": "Inbound auth, the token vault, three-legged OAuth and keeping secrets out of prompts."
         },
         {
           "id": "coding-agent",
           "file": "06-coding-agent.html",
           "title": "Build it: a GitHub coding agent",
-          "minutes": 12,
-          "summary": "Put it all together: an agent that clones a repo, fixes an issue, runs tests and opens a PR."
+          "minutes": 10,
+          "summary": "A design combining the earlier lessons: an agent that clones a repo, fixes an issue, runs tests and opens a PR."
         }
       ]
     },
     {
       "id": "copilot-universe-2026",
       "title": "GitHub Copilot: Universe 2026",
-      "description": "What's new in GitHub Copilot from GitHub Universe 2026: Fusion, the Copilot app and Projects, Agent Merge, code review Max, Automations and Enterprise access.",
+      "description": "Changes to GitHub Copilot announced at GitHub Universe 2026: Fusion, the Copilot app and Projects, Agent Merge, code review Max, Automations and Enterprise access.",
       "lessons": [
         {
           "id": "big-picture",
           "file": "01-big-picture.html",
           "title": "The big picture",
-          "minutes": 9,
-          "summary": "Copilot as a delivery system: the map of announcements and what's GA versus preview."
+          "minutes": 8,
+          "summary": "The Universe announcements, what each covers, and which are GA or in preview."
         },
         {
           "id": "fusion",
           "file": "02-fusion.html",
           "title": "Copilot Fusion: effort, not models",
-          "minutes": 10,
+          "minutes": 8,
           "summary": "Model routing and orchestration: effort levels, Single, Cascade and Critique, and what it costs."
         },
         {
@@ -79,8 +79,8 @@
           "id": "pull-requests",
           "file": "04-pull-requests.html",
           "title": "Agent Merge and code review Max",
-          "minutes": 9,
-          "summary": "Watch and fix for CI and conflicts, multi-agent reviews, approvals and a sceptical look at ReviewBench."
+          "minutes": 8,
+          "summary": "Watch and fix for CI failures and conflicts, multi-agent reviews, approvals, and the caveats about ReviewBench."
         },
         {
           "id": "automations",
@@ -94,7 +94,7 @@
           "file": "06-rollout-plan.html",
           "title": "Build it: a team rollout plan",
           "minutes": 9,
-          "summary": "Enterprise-included access, AI credits, policies and a week-by-week plan for switching it all on."
+          "summary": "Enterprise-included access, AI credits, policies and a week-by-week adoption plan."
         }
       ]
     }

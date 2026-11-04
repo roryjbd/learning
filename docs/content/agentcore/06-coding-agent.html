@@ -1,4 +1,4 @@
-<p>Time to put it all together. The goal is an agent you can hand a GitHub issue to, something like "fix #42 in <code>acme/api</code>", that will:</p>
+<p>This lesson combines the previous ones into one design: an agent that takes a GitHub issue, such as "fix #42 in <code>acme/api</code>", and will:</p>
 
 <ol>
   <li>read the issue,</li>
@@ -8,7 +8,7 @@
   <li>push a branch and open a pull request <strong>for a human to review</strong>.</li>
 </ol>
 
-<p>Along the way you'll use almost everything from the previous lessons. This lesson is about the design: which piece does which job, and why.</p>
+<p>It uses most of the services from earlier lessons. The focus is on which service does which job, and why.</p>
 
 <h2>The architecture</h2>
 
@@ -23,17 +23,17 @@
 
 <h2>Decision 1: Harness or Runtime?</h2>
 
-<p>A Harness already has a shell, file tools and a microVM per session, so it's tempting. And it works well <em>if every GitHub action goes through APIs</em>: reading issues, reading and writing files and opening PRs via GitHub's MCP server behind a gateway.</p>
+<p>A Harness already has a shell, file tools and a microVM per session. It works well <em>if every GitHub action goes through APIs</em>: reading issues, reading and writing files and opening PRs via GitHub's MCP server behind a gateway.</p>
 
-<p>But a real coding agent wants to <code>git clone</code> a private repo and <strong>run the test suite locally</strong>. That means the shell needs a GitHub credential, and the safest way to get a user's token into a <code>git</code> command without it ever entering the model's context is <em>code</em>: a tool function decorated with <code>@requires_access_token</code>. So this lesson uses <strong>Runtime with a Strands agent</strong>. It's still a small amount of code.</p>
+<p>But a coding agent usually needs to <code>git clone</code> a private repo and <strong>run the test suite locally</strong>. That means the shell needs a GitHub credential, and the safest way to get a user's token into a <code>git</code> command without it ever entering the model's context is <em>code</em>: a tool function decorated with <code>@requires_access_token</code>. So this lesson uses <strong>Runtime with a Strands agent</strong>, which needs about 80 lines of code.</p>
 
-<div class="callout"><span class="label">Rule of thumb</span>
+<div class="callout"><span class="label">Note</span>
 If the agent only needs GitHub's <em>API</em>, use a Harness with a gateway. If it needs a real working copy and a local toolchain, use Runtime, where your code controls the credentials.
 </div>
 
 <h2>Decision 2: How does it talk to GitHub?</h2>
 
-<p>There are two complementary routes, and many teams use both:</p>
+<p>There are two routes, and they can be used together:</p>
 
 <table>
   <thead><tr><th></th><th>Direct, via Identity</th><th>Through Gateway</th></tr></thead>
@@ -44,7 +44,7 @@ If the agent only needs GitHub's <em>API</em>, use a Harness with a gateway. If 
   </tbody>
 </table>
 
-<p>For the code below we'll go direct, and add a gateway policy afterwards.</p>
+<p>The code below uses the direct route. A gateway policy is added in step 5.</p>
 
 <h2>Step 1: Set up GitHub access</h2>
 
@@ -60,8 +60,8 @@ If the agent only needs GitHub's <em>API</em>, use a Harness with a gateway. If 
   <li>Give the runtime JWT inbound auth, so the user's identity flows through to the token vault (lesson 5).</li>
 </ol>
 
-<div class="callout warn"><span class="label">Scope it down</span>
-A classic OAuth app's <code>repo</code> scope covers <em>every</em> repo the user can access. A <strong>GitHub App</strong> installed on only the repos you choose is much tighter. Either way, turn on <strong>branch protection</strong> for <code>main</code> in GitHub itself, so even a confused agent can only ever open a PR.
+<div class="callout warn"><span class="label">Security</span>
+A classic OAuth app's <code>repo</code> scope covers <em>every</em> repo the user can access. A <strong>GitHub App</strong> installed on only the repos you choose limits access to those repos. In either case, turn on <strong>branch protection</strong> for <code>main</code> in GitHub, so the agent can only open PRs, not push to <code>main</code>.
 </div>
 
 <h2>Step 2: The agent</h2>
@@ -165,7 +165,7 @@ agentcore deploy</code></pre>
 
 <p>Then set what matters for this workload:</p>
 <ul>
-  <li><strong>Session storage</strong> at <code>/mnt/workspace</code>, so a lunch break doesn't throw away the clone and the installed dependencies.</li>
+  <li><strong>Session storage</strong> at <code>/mnt/workspace</code>, so an idle timeout doesn't lose the clone and the installed dependencies.</li>
   <li><strong>Lifecycle</strong>: an idle timeout long enough for a slow test suite, and a max lifetime well under 8 hours.</li>
   <li><strong>VPC mode</strong> if it needs to reach private package registries.</li>
 </ul>
@@ -184,12 +184,12 @@ data.invoke_agent_runtime(
 
 <p>Each task gets its own microVM, so two issues being fixed at once can't interfere with each other.</p>
 
-<h3>Trust, but verify</h3>
-<p>The agent will <em>say</em> the tests pass. Don't take its word for it. Because <code>InvokeAgentRuntimeCommand</code> runs a command in the <strong>same session</strong> with the same filesystem, your orchestrator can independently run the test command in <code>/mnt/workspace/api</code> and check the exit code itself, with no model involved. And GitHub's own CI runs on the PR anyway.</p>
+<h3>Verify the tests yourself</h3>
+<p>The agent may report that the tests pass when they don't. Because <code>InvokeAgentRuntimeCommand</code> runs a command in the <strong>same session</strong> with the same filesystem, your orchestrator can independently run the test command in <code>/mnt/workspace/api</code> and check the exit code itself, with no model involved. GitHub's CI also runs on the PR.</p>
 
 <h2>Step 5: Guardrails with Gateway and Policy</h2>
 
-<p>If you also give the agent GitHub's hosted MCP server through a gateway (say, a target named <code>GitHub</code>, for richer issue and PR tools), Policy can draw hard lines. Here's an example, assuming the server exposes a <code>merge_pull_request</code> tool:</p>
+<p>If you also give the agent GitHub's hosted MCP server through a gateway (say, a target named <code>GitHub</code>, for richer issue and PR tools), Policy can block specific actions. For example, if the server exposes a <code>merge_pull_request</code> tool:</p>
 
 <pre><code>forbid(
   principal,
@@ -197,7 +197,7 @@ data.invoke_agent_runtime(
   resource
 );</code></pre>
 
-<p>Because <code>forbid</code> always beats <code>permit</code>, no prompt, issue text or README instruction can get the agent to merge its own work. That matters here, because <strong>issue bodies are untrusted input</strong>. Anyone who can file an issue can try to inject instructions.</p>
+<p>Because <code>forbid</code> always beats <code>permit</code>, no prompt, issue text or README instruction can get the agent to merge its own work. This matters because <strong>issue bodies are untrusted input</strong>. Anyone who can file an issue can try to inject instructions.</p>
 
 <h2>Step 6: Make it learn each repo</h2>
 
@@ -206,16 +206,16 @@ data.invoke_agent_runtime(
   <li>Semantic facts: "tests run with <code>make test</code>", "uses pnpm, not npm".</li>
   <li>Episodes: "last time the auth tests failed it was a missing env var in <code>.env.test</code>".</li>
 </ul>
-<p>Before each task, retrieve from <code>/repos/repo:acme/api/…</code> and add the results to the prompt. The agent gets faster on repos it has seen before.</p>
+<p>Before each task, retrieve from <code>/repos/repo:acme/api/…</code> and add the results to the prompt. The agent then doesn't have to rediscover these details on each task.</p>
 
 <h2>Step 7: Watch it</h2>
 <ul>
   <li><strong>Traces</strong> (OpenTelemetry into CloudWatch) show every model call, tool call and tool result. That's how you answer "why did it edit that file?"</li>
-  <li><strong>Metrics</strong>: invocations, latency, errors and session counts come for free. Token usage needs ADOT instrumentation.</li>
-  <li><strong>Evaluations</strong> can score finished runs with an LLM judge, which helps you notice when a model or prompt change makes things worse.</li>
+  <li><strong>Metrics</strong>: invocations, latency, errors and session counts are recorded by default. Token usage needs ADOT instrumentation.</li>
+  <li><strong>Evaluations</strong> can score finished runs with an LLM judge, which shows when a model or prompt change lowers quality.</li>
 </ul>
 
-<h2>The checklist</h2>
+<h2>Takeaways</h2>
 <ul>
   <li>Runtime, Strands agent, session storage at <code>/mnt/workspace</code>.</li>
   <li>JWT inbound auth, GitHub OAuth provider, <code>USER_FEDERATION</code>, narrow scopes or a GitHub App.</li>

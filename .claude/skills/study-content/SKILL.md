@@ -33,22 +33,23 @@ Copy `templates/lesson.html` as the starting point. File name: `docs/content/<to
 **Shape**
 - 1,000–1,500 words of body text, about 9–12 minutes including the quiz. Calculate the reading time as words ÷ 200, plus about 3 minutes for the quiz.
 - **No `<h1>`**: the app renders the title and summary from `index.json`.
-- Open with 1–3 paragraphs naming the problem the concept solves, before any definitions.
+- Open with one or two short paragraphs: the problem the concept solves, stated plainly, then what it is.
 - Use `<h2>` sections (and `<h3>` within them). Aim for 5–8 sections.
 - End with `<h2>Takeaways</h2>` and 4–6 bullets that restate the lesson's key ideas.
 - Then the quiz block (step 4).
 
-**Voice**
-- Write in second person and plain English, for a smart engineer who's new to the topic. Explain *why* before *how*.
-- Use concrete examples throughout ("a coding agent that spends 20 minutes installing dependencies…").
+**Voice**: load the `plain-writing` skill before writing and follow it. In short:
+- Plain, factual language with no hype, scene-setting or rhetorical framing. Second person, for an engineer who's new to the topic. Explain *why* before *how*, in concrete terms.
+- Short, labelled examples ("For example, a coding agent that spends 20 minutes installing dependencies…"), not narratives.
+- Attribute vendor claims and benchmarks, and give exact names, numbers and statuses.
 - Keep code samples short, real and annotated with prose afterwards ("A few things to notice:"). Escape `<`, `>` and `&` inside `<pre><code>` as `&lt;`, `&gt;` and `&amp;`.
-- Use British English, matching the existing lessons.
+- British English, with no exclamation marks.
 
 **Components** (styled in `styles.css`; use these instead of inventing new markup)
 
 | Need | Markup |
 |---|---|
-| Key idea, tip, warning | `<div class="callout key\|warn"><span class="label">Key idea</span>…</div>` (plain `callout` for a tip) |
+| Key point, note, warning | `<div class="callout key\|warn"><span class="label">Key point</span>…</div>` (plain `callout` for a note). Labels: `Key point`, `Note`, `Warning`, `Limit`, `Security` only |
 | Step-by-step flow or request path | `<ol class="flow"><li><b>Step</b><span>Detail</span></li>…</ol>` |
 | Map of parts or services | `<div class="tiles"><div><b>Name</b><span>One line</span></div>…</div>` |
 | Comparisons and options | `<table>` with `<thead>` (the app wraps it to scroll on phones) |
@@ -77,7 +78,7 @@ The quiz is a JSON block at the end of the lesson file:
 - The app **shuffles options**, so never write "all of the above", "both A and B" or anything else that depends on order.
 - Test understanding, not recall. At least half the questions should be scenarios ("Your container builds but never starts. Most likely cause?").
 - Distractors must be plausible: real features used wrongly, or common misconceptions. Don't include joke options.
-- `explain` is 1–2 sentences. Say why the right answer is right, and where it helps, why the most tempting wrong answer is wrong.
+- `explain` is 1–2 factual sentences. Say why the right answer is right, and where it helps, why the most tempting wrong answer is wrong. No praise or scolding.
 - Every question must be answerable from the lesson text.
 
 ## 5. Register it in the catalogue
@@ -98,9 +99,10 @@ Run the checker from the repo root. It validates the catalogue, files, quiz JSON
 
 ```bash
 python3 .claude/skills/study-content/scripts/check_content.py
+python3 .claude/skills/plain-writing/scripts/check_style.py
 ```
 
-Fix every error. Treat warnings as prompts to look again, not hard failures.
+The second command checks the house style: banned hype and filler phrases, exclamation marks and callout labels. Fix every error from both. Treat warnings as prompts to look again, not hard failures.
 
 Then preview it with the `study` config in `.claude/launch.json` (port 8765) at the mobile preset, and check:
 - the new lessons open from the topic page,

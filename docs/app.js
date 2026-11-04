@@ -248,7 +248,7 @@ function renderQuiz(root, questions, topic, lesson) {
         else b.classList.add('dim');
       });
       explain.className = 'explain';
-      explain.innerHTML = `<b class="${right ? 'good' : 'bad'}">${right ? 'Correct.' : 'Not quite.'}</b> ${esc(q.explain)}`;
+      explain.innerHTML = `<b class="${right ? 'good' : 'bad'}">${right ? 'Correct.' : 'Incorrect.'}</b> ${esc(q.explain)}`;
       if (answers.every((a) => a !== null)) finish();
     });
     list.append(card);
@@ -261,9 +261,9 @@ function renderQuiz(root, questions, topic, lesson) {
     s.total = total;
     s.best = Math.max(s.best ?? 0, score);
     saveState();
-    const msg = score === total ? 'Perfect. On to the next one.'
-      : score >= total * 0.6 ? 'Solid. Skim the explanations for the ones you missed.'
-      : 'Worth another read of the sections you missed.';
+    const msg = score === total ? 'All answers correct.'
+      : score >= total * 0.6 ? 'Read the explanations for the questions you got wrong.'
+      : 'Reread the sections covering the questions you got wrong.';
     result.innerHTML = `
       <div class="score">
         <div class="big">${score}/${total}</div>
